@@ -16,6 +16,9 @@ type FightScreenProps = {
 }
 
 const HIT_WORDS = ['POW!', 'BAM!', 'WHAM!', 'CRACK!', 'BOOM!', 'OUCH!']
+const BLOCK_WORDS = ['BLOCK!', 'GUARD!', 'NICE!']
+const PUNCH_SOUND_POOL = ['/sounds/punch.mp3', '/sounds/punch00.mp3', '/sounds/punch01.mp3']
+const OUCH_SOUND_SRC = '/sounds/ouch.mp3'
 
 const BAUHAUS = {
   blue: 0x1040c0,
@@ -27,6 +30,8 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hpRef = useRef<HTMLDivElement>(null)
+  const playerHpRef = useRef<HTMLDivElement>(null)
+  const koTitleRef = useRef<HTMLHeadingElement>(null)
   const splashRef = useRef<HTMLDivElement>(null)
   const flashRef = useRef<HTMLDivElement>(null)
   const koRef = useRef<HTMLDivElement>(null)
@@ -156,11 +161,23 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
         })
     }
 
+    type AiGloveUserData = {
+      rest: THREE.Vector3
+      target: THREE.Vector3
+      t: number
+      active: boolean
+      side: number
+      hit: boolean
+    }
+
+    const aiGloves: THREE.Group[] = []
+
     // Cartoon body
     {
       const skin = new THREE.MeshStandardMaterial({ color: 0xc89a72, roughness: 0.8 })
       const shirt = new THREE.MeshStandardMaterial({ color: BAUHAUS.red, roughness: 0.7 })
       const gloveM = new THREE.MeshStandardMaterial({ color: BAUHAUS.blue, roughness: 0.45 })
+      const cuffM = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
       const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.72, 1.5, 18), shirt)
       torso.position.y = 0.55
       torso.scale.z = 0.72
@@ -177,10 +194,26 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
         arm.rotation.z = s * 0.45
         arm.rotation.x = -0.5
         fighter.add(arm)
-        const glove = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 12), gloveM)
-        glove.scale.set(1, 0.92, 1.1)
-        glove.position.set(s * 1.0, 0.15, 0.62)
-        fighter.add(glove)
+        const g = new THREE.Group()
+        const fist = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 12), gloveM)
+        fist.scale.set(1, 0.92, 1.1)
+        const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.32, 10), cuffM)
+        cuff.position.set(0, -0.1, 0.38)
+        cuff.rotation.x = 1.1
+        g.add(fist, cuff)
+        const rest = new THREE.Vector3(s * 1.0, 0.15, 0.62)
+        const target = new THREE.Vector3(s * 1.14, 1.38, 2.55)
+        g.position.copy(rest)
+        g.userData = {
+          rest,
+          target,
+          t: 0,
+          active: false,
+          side: s,
+          hit: false,
+        }
+        fighter.add(g)
+        aiGloves.push(g)
       }
       const belt = new THREE.Mesh(
         new THREE.TorusGeometry(0.7, 0.09, 10, 24),
@@ -309,18 +342,29 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     }
 
     let hp = 100
+    let playerHp = 100
     let ko = false
     let started = false
     let mouthBroken = false
+    let blocking = false
+    let aiCooldown = 2.2
+    let aiWindup = false
     const headVel = { x: 0, y: 0, z: 0 }
     let squash = 0
     let shake = 0
     let dizzy = 0
 
     const hpFill = hpRef.current
+    const playerHpFill = playerHpRef.current
     const splash = splashRef.current
     const flash = flashRef.current
     const koPanel = koRef.current
+    const koTitle = koTitleRef.current
+
+    const guardPos = [
+      new THREE.Vector3(-0.78, 1.18, 2.85),
+      new THREE.Vector3(0.78, 1.18, 2.85),
+    ]
 
     function showSplash(txt: string) {
       if (!splash) return
@@ -331,10 +375,87 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       splash.classList.add('show')
     }
 
+    const punchSounds = PUNCH_SOUND_POOL.map((src) => {
+      const audio = new Audio(src)
+      audio.preload = 'auto'
+      return audio
+    })
+    const ouchSound = new Audio(OUCH_SOUND_SRC)
+    ouchSound.preload = 'auto'
+
+    function playPunchSound() {
+      const pick = punchSounds[(Math.random() * punchSounds.length) | 0]
+      if (!pick) return
+      const clip = pick.cloneNode() as HTMLAudioElement
+      clip.volume = 0.72
+      void clip.play().catch(() => {})
+    }
+
+    function playOuchSound() {
+      const clip = ouchSound.cloneNode() as HTMLAudioElement
+      clip.volume = 0.78
+      void clip.play().catch(() => {})
+    }
+
     const startTimer = window.setTimeout(() => {
       showSplash('FIGHT!')
       started = true
     }, 600)
+
+    function showFightWord(text: string, className = 'fight-pow', xBias = 0) {
+      const w = document.createElement('div')
+      w.className = className
+      w.textContent = text
+      w.style.setProperty('--r', `${Math.random() * 30 - 15}deg`)
+      w.style.left = `${window.innerWidth / 2 + (Math.random() * 120 - 60) + xBias}px`
+      w.style.top = `${window.innerHeight * 0.32 + (Math.random() * 60 - 30)}px`
+      wrapRef.current?.appendChild(w)
+      window.setTimeout(() => w.remove(), 520)
+    }
+
+    function updatePlayerHpBar() {
+      if (!playerHpFill) return
+      playerHpFill.style.width = `${playerHp}%`
+      if (playerHp <= 50) {
+        playerHpFill.style.background = '#f0c020'
+      }
+      if (playerHp < 18) {
+        playerHpFill.style.background = '#d02020'
+      }
+    }
+
+    function landPlayerHit(side: number) {
+      if (ko) return
+      if (blocking) {
+        showFightWord(
+          BLOCK_WORDS[(Math.random() * BLOCK_WORDS.length) | 0] ?? 'BLOCK!',
+          'fight-pow fight-pow--block',
+        )
+        playerHp = Math.max(0, playerHp - 2)
+        updatePlayerHpBar()
+        shake = 0.35
+        if (navigator.vibrate) navigator.vibrate(12)
+        return
+      }
+
+      playerHp = Math.max(0, playerHp - (8 + Math.random() * 6))
+      updatePlayerHpBar()
+      playOuchSound()
+      shake = 1.1
+      if (flash) {
+        flash.style.background = '#d02020'
+        flash.style.opacity = '0.4'
+        window.setTimeout(() => {
+          if (flash) {
+            flash.style.opacity = '0'
+            flash.style.background = ''
+          }
+        }, 80)
+      }
+      showFightWord('OUCH!', 'fight-pow fight-pow--hurt', -side * 40)
+      if (navigator.vibrate) navigator.vibrate(55)
+      if (playerHp <= 0) doPlayerKO()
+    }
 
     function landHit(side: number) {
       if (ko) return
@@ -365,14 +486,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
           if (flash) flash.style.opacity = '0'
         }, 60)
       }
-      const w = document.createElement('div')
-      w.className = 'fight-pow'
-      w.textContent = HIT_WORDS[(Math.random() * HIT_WORDS.length) | 0] ?? 'POW!'
-      w.style.setProperty('--r', `${Math.random() * 30 - 15}deg`)
-      w.style.left = `${window.innerWidth / 2 + (Math.random() * 120 - 60) + side * 60}px`
-      w.style.top = `${window.innerHeight * 0.32 + (Math.random() * 60 - 30)}px`
-      wrapRef.current?.appendChild(w)
-      window.setTimeout(() => w.remove(), 520)
+      showFightWord(HIT_WORDS[(Math.random() * HIT_WORDS.length) | 0] ?? 'POW!', 'fight-pow', side * 60)
       if (navigator.vibrate) navigator.vibrate(35)
       if (hp <= 0) doKO()
     }
@@ -380,15 +494,40 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     function doKO() {
       ko = true
       dizzy = 1
+      if (koTitle) koTitle.textContent = 'K.O.!'
       showSplash('K.O.!')
       window.setTimeout(() => koPanel?.classList.add('show'), 900)
     }
 
+    function doPlayerKO() {
+      ko = true
+      dizzy = 0.5
+      if (koTitle) koTitle.textContent = 'DOWN!'
+      showSplash('DOWN!')
+      window.setTimeout(() => koPanel?.classList.add('show'), 900)
+    }
+
+    function tryAiPunch() {
+      if (ko || !started || aiWindup) return
+      const side = Math.random() < 0.5 ? -1 : 1
+      const g = aiGloves[side < 0 ? 0 : 1]
+      const u = g.userData as AiGloveUserData
+      if (u.active) return
+      u.active = true
+      u.t = 0
+      u.hit = false
+      aiWindup = true
+    }
+
     function rematch() {
       hp = 100
+      playerHp = 100
       ko = false
       dizzy = 0
       mouthBroken = false
+      blocking = false
+      aiCooldown = 2.2
+      aiWindup = false
       bruises.length = 0
       faceBakeGen++
       if (faceCanvasTex) {
@@ -405,6 +544,18 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
         hpFill.style.width = '100%'
         hpFill.style.background = '#f0c020'
       }
+      if (playerHpFill) {
+        playerHpFill.style.width = '100%'
+        playerHpFill.style.background = '#1040c0'
+      }
+      if (koTitle) koTitle.textContent = 'K.O.!'
+      aiGloves.forEach((g) => {
+        const u = g.userData as AiGloveUserData
+        u.active = false
+        u.hit = false
+        u.t = 0
+        g.position.copy(u.rest)
+      })
       fighter.rotation.set(0, 0, 0)
       fighter.position.y = -0.55
       koPanel?.classList.remove('show')
@@ -419,6 +570,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       ud.active = true
       ud.t = 0
       ud.hit = false
+      playPunchSound()
     }
 
     const onPunchLeft = (e: Event) => {
@@ -431,8 +583,16 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     }
     const onCanvasDown = (e: PointerEvent) => punch(e.clientX < window.innerWidth / 2 ? -1 : 1)
     const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault()
+        blocking = true
+        return
+      }
       if (e.key === 'a' || e.key === 'ArrowLeft') punch(-1)
       if (e.key === 'l' || e.key === 'ArrowRight') punch(1)
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') blocking = false
     }
 
     const btnLeft = root.querySelector('#fight-pl')
@@ -443,6 +603,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     btnRematch?.addEventListener('click', rematch)
     canvas.addEventListener('pointerdown', onCanvasDown)
     window.addEventListener('keydown', onKey)
+    window.addEventListener('keyup', onKeyUp)
 
     const clock = new THREE.Clock()
     let frameId = 0
@@ -507,8 +668,13 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
         }
       }
 
+      if (!ko && started) {
+        aiCooldown -= dt
+        if (aiCooldown <= 0) tryAiPunch()
+      }
+
       const headWorld = new THREE.Vector3()
-      myGloves.forEach((g) => {
+      myGloves.forEach((g, i) => {
         const u = g.userData as GloveUserData
         if (u.active) {
           u.t += dt * 4.2
@@ -530,7 +696,36 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
             g.position.copy(u.rest)
           }
         } else {
-          g.position.y = u.rest.y + Math.sin(t * 3 + u.side) * 0.06
+          const guard = guardPos[i]
+          if (blocking) {
+            g.position.lerp(guard, dt * 14)
+          } else {
+            g.position.lerp(u.rest, dt * 10)
+            if (g.position.distanceTo(u.rest) < 0.08) {
+              g.position.y = u.rest.y + Math.sin(t * 3 + u.side) * 0.06
+            }
+          }
+        }
+      })
+
+      aiGloves.forEach((g) => {
+        const u = g.userData as AiGloveUserData
+        if (!u.active) return
+        u.t += dt * 3.6
+        if (u.t < 1) {
+          g.position.lerpVectors(u.rest, u.target, THREE.MathUtils.smoothstep(u.t, 0, 1))
+          if (u.t >= 0.9 && !u.hit) {
+            u.hit = true
+            landPlayerHit(u.side)
+          }
+        } else if (u.t < 2) {
+          g.position.lerpVectors(u.target, u.rest, THREE.MathUtils.smoothstep(u.t - 1, 0, 1))
+        } else {
+          u.active = false
+          u.hit = false
+          g.position.copy(u.rest)
+          aiWindup = false
+          aiCooldown = 1.4 + Math.random() * 2.4
         }
       })
 
@@ -547,6 +742,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       window.clearTimeout(startTimer)
       window.removeEventListener('resize', resize)
       window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onKeyUp)
       canvas.removeEventListener('pointerdown', onCanvasDown)
       btnLeft?.removeEventListener('pointerdown', onPunchLeft)
       btnRight?.removeEventListener('pointerdown', onPunchRight)
@@ -582,15 +778,21 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       <div ref={flashRef} className="fight-flash" />
 
       <p className="fight-hint">
-        Tap left or right side of the screen, or use the punch buttons
+        Punch: tap screen or buttons · Hold Space to block
       </p>
 
-      <div className="fight-btns">
+      <div className="fight-controls">
         <button type="button" className="fight-punch" id="fight-pl">
           LEFT
           <br />
           PUNCH
         </button>
+        <div className="fight-player-hud">
+          <div className="fight-hp-name fight-hp-name--player">YOU</div>
+          <div className="fight-hp-bar fight-hp-bar--player">
+            <div ref={playerHpRef} className="fight-hp-fill fight-hp-fill--player" />
+          </div>
+        </div>
         <button type="button" className="fight-punch" id="fight-pr">
           RIGHT
           <br />
@@ -599,7 +801,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       </div>
 
       <div ref={koRef} className="fight-ko">
-        <h2>K.O.!</h2>
+        <h2 ref={koTitleRef}>K.O.!</h2>
         <button type="button" className="fight-rematch" id="fight-rematch">
           Rematch
         </button>

@@ -74,6 +74,42 @@
   border-right: var(--border-width) solid var(--border-color);
 }
 
+.fight-hp-fill--player {
+  background: var(--bauhaus-blue);
+}
+
+.fight-controls {
+  position: absolute;
+  bottom: 14px;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px;
+  z-index: 20;
+}
+
+.fight-player-hud {
+  flex: none;
+  width: min(200px, 36vw);
+  pointer-events: none;
+  text-align: center;
+}
+
+.fight-hp-name--player {
+  color: var(--bauhaus-white);
+  text-align: center;
+  margin-bottom: 6px;
+  text-shadow: 0 1px 0 var(--border-color);
+}
+
+.fight-hp-bar--player {
+  height: 22px;
+  background: rgba(18, 18, 18, 0.35);
+}
+
 .fight-round {
   text-align: center;
   color: var(--bauhaus-foreground);
@@ -151,6 +187,15 @@
   animation: fight-pow-anim 0.5s ease-out forwards;
 }
 
+.fight-pow--block {
+  color: var(--bauhaus-blue);
+  font-size: 40px;
+}
+
+.fight-pow--hurt {
+  color: var(--bauhaus-red);
+}
+
 @keyframes fight-pow-anim {
   0% {
     transform: scale(0.2) rotate(var(--r));
@@ -166,18 +211,8 @@
   }
 }
 
-.fight-btns {
-  position: absolute;
-  bottom: 14px;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  padding: 0 18px;
-  z-index: 20;
-}
-
 .fight-punch {
+  flex: none;
   width: 92px;
   height: 92px;
   border-radius: 50%;
@@ -256,7 +291,8 @@
 .fight-hint {
   position: absolute;
   bottom: 118px;
-  width: 100%;
+  left: 18px;
+  right: 18px;
   text-align: center;
   z-index: 15;
   color: var(--bauhaus-white);
