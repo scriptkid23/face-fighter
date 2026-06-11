@@ -1,0 +1,261 @@
+.fight-screen {
+  position: fixed;
+  inset: 0;
+  background: #2a1c0e;
+  font-family: 'Arial Black', Impact, 'Segoe UI', sans-serif;
+}
+
+.fight-gl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.fight-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 12px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.fight-hp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.fight-portrait {
+  width: 58px;
+  height: 58px;
+  border-radius: 10px;
+  border: 4px solid #ffcc1d;
+  background: #000 center / cover no-repeat;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5);
+  flex: none;
+  transform: rotate(-3deg);
+}
+
+.fight-hp-shell {
+  flex: 1;
+}
+
+.fight-hp-name {
+  color: #fff;
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 0 #000;
+  margin-bottom: 4px;
+  transform: rotate(-1deg);
+}
+
+.fight-hp-bar {
+  height: 26px;
+  background: #3a2a14;
+  border: 4px solid #000;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5), inset 0 3px 0 rgba(255, 255, 255, 0.15);
+}
+
+.fight-hp-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(180deg, #7dff4d, #46d11f 55%, #2f9e0e);
+  transition: width 0.18s cubic-bezier(0.2, 1.4, 0.4, 1);
+  border-right: 3px solid rgba(0, 0, 0, 0.35);
+}
+
+.fight-round {
+  text-align: center;
+  color: #ffcc1d;
+  font-size: 15px;
+  letter-spacing: 3px;
+  text-shadow: 2px 2px 0 #000;
+  margin-top: 6px;
+}
+
+.fight-splash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.fight-splash span {
+  font-size: clamp(64px, 18vw, 150px);
+  color: #ffcc1d;
+  -webkit-text-stroke: 6px #000;
+  text-shadow: 0 10px 0 rgba(0, 0, 0, 0.45);
+  transform: scale(0);
+  letter-spacing: 2px;
+}
+
+.fight-splash.show span {
+  animation: fight-pop 0.55s cubic-bezier(0.2, 2.2, 0.3, 1) forwards;
+}
+
+@keyframes fight-pop {
+  to {
+    transform: scale(1) rotate(-4deg);
+  }
+}
+
+.fight-pow {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+  font-size: 46px;
+  color: #fff;
+  -webkit-text-stroke: 4px #000;
+  text-shadow: 0 6px 0 rgba(0, 0, 0, 0.4);
+  animation: fight-pow-anim 0.5s ease-out forwards;
+}
+
+@keyframes fight-pow-anim {
+  0% {
+    transform: scale(0.2) rotate(var(--r));
+    opacity: 1;
+  }
+  60% {
+    transform: scale(1.15) rotate(var(--r));
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.3) rotate(var(--r)) translateY(-30px);
+    opacity: 0;
+  }
+}
+
+.fight-btns {
+  position: absolute;
+  bottom: 14px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 18px;
+  z-index: 20;
+}
+
+.fight-punch {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: 5px solid #000;
+  background: radial-gradient(circle at 32% 28%, #ff7a6b, #e3342f 60%, #8f1410);
+  color: #fff;
+  font-family: inherit;
+  font-size: 15px;
+  letter-spacing: 1px;
+  box-shadow: 0 7px 0 #000, inset 0 4px 0 rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  transition: transform 0.07s;
+  -webkit-text-stroke: 1px #000;
+  text-shadow: 1px 2px 0 #000;
+}
+
+.fight-punch:active {
+  transform: translateY(5px);
+  box-shadow: 0 2px 0 #000;
+}
+
+.fight-ko {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  gap: 18px;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  background: rgba(20, 10, 0, 0.55);
+}
+
+.fight-ko.show {
+  display: flex;
+}
+
+.fight-ko h2 {
+  font-size: clamp(60px, 16vw, 130px);
+  color: #e3342f;
+  -webkit-text-stroke: 6px #000;
+  text-shadow: 0 10px 0 rgba(0, 0, 0, 0.5);
+  transform: rotate(-5deg);
+  animation: fight-pop 0.5s cubic-bezier(0.2, 2.2, 0.3, 1);
+  margin: 0;
+}
+
+.fight-rematch {
+  font-family: inherit;
+  font-size: 20px;
+  padding: 14px 34px;
+  border-radius: 14px;
+  border: 5px solid #000;
+  background: linear-gradient(180deg, #ffe263, #ffcc1d);
+  box-shadow: 0 6px 0 #000;
+  cursor: pointer;
+  letter-spacing: 1px;
+  color: #000;
+}
+
+.fight-rematch:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #000;
+}
+
+.fight-hint {
+  position: absolute;
+  bottom: 118px;
+  width: 100%;
+  text-align: center;
+  z-index: 15;
+  color: #fff;
+  font-size: 13px;
+  text-shadow: 1px 1px 0 #000;
+  letter-spacing: 1px;
+  font-family: 'Segoe UI', sans-serif;
+  opacity: 0.85;
+  pointer-events: none;
+  margin: 0;
+}
+
+.fight-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 18;
+}
+
+.fight-back {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 35;
+  font-size: 0.78rem;
+  padding: 0.45rem 0.75rem;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  border-radius: 8px;
+  border: 3px solid #000;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #000;
+}
+
+.fight-back:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #000;
+}
