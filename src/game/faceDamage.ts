@@ -2,6 +2,7 @@ import { LANDMARK_V, MOUNT_LANDMARKS, OVAL } from './faceAlign'
 
 const MOUTH_SRC = '/mount.png'
 const MOUTH_SRC_FALLBACK = '/mount.jpg'
+const EYE_SRC = '/eye.png'
 
 export type BruiseZoneId =
   | 'leftCheek'
@@ -611,6 +612,52 @@ function paintBruise(
   ctx.putImageData(skin, x0, y0)
 }
 
+function cleanEyeSprite(img: HTMLImageElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = img.naturalWidth
+  canvas.height = img.naturalHeight
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas unavailable')
+  ctx.drawImage(img, 0, 0)
+  removeGlobalBackdrop(ctx)
+  return canvas
+}
+
+let eyeSpritePromise: Promise<HTMLCanvasElement> | null = null
+
+function getEyeSprite(): Promise<HTMLCanvasElement> {
+  if (!eyeSpritePromise) {
+    eyeSpritePromise = loadImage(EYE_SRC).then(cleanEyeSprite)
+  }
+  return eyeSpritePromise
+}
+
+function paintEyeOverlay(
+  ctx: CanvasRenderingContext2D,
+  sprite: HTMLCanvasElement,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  size: number,
+  flipX = false,
+) {
+  const w = rx * 2.2 * size
+  const h = ry * 2.7 * size
+  const x = cx * size - w / 2
+  const y = cy * size - h / 2
+
+  ctx.save()
+  if (flipX) {
+    ctx.translate(x + w / 2, y + h / 2)
+    ctx.scale(-1, 1)
+    ctx.drawImage(sprite, -w / 2, -h / 2, w, h)
+  } else {
+    ctx.drawImage(sprite, x, y, w, h)
+  }
+  ctx.restore()
+}
+
 let overlayPromise: Promise<MouthOverlay> | null = null
 
 function getMouthOverlay(): Promise<MouthOverlay> {
@@ -623,9 +670,15 @@ function getMouthOverlay(): Promise<MouthOverlay> {
   return overlayPromise
 }
 
+export type DamagedEyeSide = 'left' | 'right'
+
 export type FightFaceOptions = {
   mouthBroken?: boolean
   bruises?: BruiseStamp[]
+  /** Swollen black-eye overlay when opponent HP ≤ 70%. */
+  eyesDamaged?: boolean
+  /** Which eye shows the overlay — one side only. */
+  damagedEyeSide?: DamagedEyeSide
 }
 
 /** Compose face texture with bruises and optional broken mouth. */
@@ -634,14 +687,18 @@ export async function renderFightFace(
   options: FightFaceOptions = {},
 ): Promise<HTMLCanvasElement> {
   const mouthBroken = options.mouthBroken ?? false
+  const eyesDamaged = options.eyesDamaged ?? false
   const bruises = options.bruises ?? []
 
   const loaders: Promise<unknown>[] = [loadImage(previewUrl)]
   if (mouthBroken) loaders.push(getMouthOverlay())
+  if (eyesDamaged) loaders.push(getEyeSprite())
 
   const results = await Promise.all(loaders)
   const faceImg = results[0] as HTMLImageElement
-  const mouthOverlay = mouthBroken ? (results[1] as MouthOverlay) : null
+  let extra = 1
+  const mouthOverlay = mouthBroken ? (results[extra++] as MouthOverlay) : null
+  const eyeSprite = eyesDamaged ? (results[extra] as HTMLCanvasElement) : null
 
   const size = faceImg.naturalWidth
   const canvas = document.createElement('canvas')
@@ -666,6 +723,21 @@ export async function renderFightFace(
 
   for (const stamp of bruises) {
     paintBruise(ctx, stamp, size)
+  }
+
+  if (eyesDamaged && eyeSprite) {
+    const side = options.damagedEyeSide ?? 'left'
+    const eye = side === 'left' ? MOUNT_LANDMARKS.leftEye : MOUNT_LANDMARKS.rightEye
+    paintEyeOverlay(
+      ctx,
+      eyeSprite,
+      eye.cx,
+      eye.cy,
+      eye.rx,
+      eye.ry,
+      size,
+      side === 'right',
+    )
   }
 
   if (mouthBroken && mouthOverlay) {

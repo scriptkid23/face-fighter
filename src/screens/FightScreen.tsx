@@ -5,6 +5,7 @@ import {
   mouthPivotLocalY,
   renderFightFace,
   type BruiseStamp,
+  type DamagedEyeSide,
 } from '../game/faceDamage'
 import type { ProcessedFaceImage } from '../game/faceImage'
 import { buildFaceMesh, buildSkullMesh } from '../game/fighterHead'
@@ -144,7 +145,12 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
 
     function applyFaceTexture() {
       const gen = ++faceBakeGen
-      void renderFightFace(face.previewUrl, { mouthBroken, bruises })
+      void renderFightFace(face.previewUrl, {
+        mouthBroken,
+        bruises,
+        eyesDamaged: hp <= 70,
+        damagedEyeSide: damagedEyeSide ?? 'left',
+      })
         .then((c) => {
           if (gen !== faceBakeGen) return
           if (faceCanvasTex) faceCanvasTex.dispose()
@@ -346,6 +352,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     let ko = false
     let started = false
     let mouthBroken = false
+    let damagedEyeSide: DamagedEyeSide | null = null
     let blocking = false
     let aiCooldown = 2.2
     let aiWindup = false
@@ -476,6 +483,9 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       shake = 1
       dizzy = Math.min(1, dizzy + (hp < 35 ? 0.6 : 0.25))
       bruises.push(bruiseStampFromHit(side, bruises.length, bruises))
+      if (hp <= 70 && !damagedEyeSide) {
+        damagedEyeSide = side < 0 ? 'left' : 'right'
+      }
       const firstMouthBreak = !mouthBroken && hp <= 50
       if (firstMouthBreak) mouthBroken = true
       applyFaceTexture()
@@ -525,6 +535,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       ko = false
       dizzy = 0
       mouthBroken = false
+      damagedEyeSide = null
       blocking = false
       aiCooldown = 2.2
       aiWindup = false
