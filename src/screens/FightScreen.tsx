@@ -341,7 +341,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       hp = Math.max(0, hp - (7 + Math.random() * 6))
       if (hpFill) {
         hpFill.style.width = `${hp}%`
-        if (hp < 40) {
+        if (hp <= 50) {
           hpFill.style.background = '#f0c020'
         }
         if (hp < 18) {
@@ -354,8 +354,8 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       squash = 1
       shake = 1
       dizzy = Math.min(1, dizzy + (hp < 35 ? 0.6 : 0.25))
-      const firstMouthBreak = !mouthBroken
-      bruises.push(bruiseStampFromHit(side, bruises.length))
+      bruises.push(bruiseStampFromHit(side, bruises.length, bruises))
+      const firstMouthBreak = !mouthBroken && hp <= 50
       if (firstMouthBreak) mouthBroken = true
       applyFaceTexture()
       spawnTeeth(side, firstMouthBreak ? 3 : 1 + ((Math.random() * 2) | 0))

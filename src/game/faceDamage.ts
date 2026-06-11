@@ -3,6 +3,13 @@ import { LANDMARK_V, MOUNT_LANDMARKS, OVAL } from './faceAlign'
 const MOUTH_SRC = '/mount.png'
 const MOUTH_SRC_FALLBACK = '/mount.jpg'
 
+export type BruiseZoneId =
+  | 'leftCheek'
+  | 'rightCheek'
+  | 'leftEye'
+  | 'rightEye'
+  | 'forehead'
+
 export type BruiseStamp = {
   cx: number
   cy: number
@@ -12,27 +19,7 @@ export type BruiseStamp = {
   alpha: number
   /** Stable seed for procedural bruise shape / mottle. */
   seed: number
-}
-
-/**
- * Cheekbone (zygomatic) bruise for a punch from `side` (−1 left glove, +1 right).
- * Large, irregular patch on the cheek — may extend slightly under the eye.
- */
-export function bruiseStampFromHit(side: number, index: number): BruiseStamp {
-  const cheekX = OVAL.cx + side * 0.52 * OVAL.rx
-  const cheekY = OVAL.cy + 0.02 * OVAL.ry
-  const jitterX = side * ((index * 0.19) % 1) * 0.035 * OVAL.rx
-  const jitterY = ((index * 0.27) % 1 - 0.5) * 0.04 * OVAL.ry
-
-  return {
-    cx: cheekX + jitterX,
-    cy: cheekY + jitterY,
-    rx: OVAL.rx * (0.32 + (index % 3) * 0.04),
-    ry: OVAL.ry * (0.26 + (index % 2) * 0.03),
-    rotation: side * 0.22 + (index % 4) * 0.05,
-    alpha: Math.min(0.82, 0.5 + (index % 5) * 0.06),
-    seed: (index * 7919 + side * 104729) | 0,
-  }
+  zone: BruiseZoneId
 }
 
 type MouthOverlay = {
@@ -263,6 +250,149 @@ function fbm(x: number, y: number, seed: number, octaves = 4): number {
   return v
 }
 
+type BruiseZoneDef = {
+  cx: number
+  cy: number
+  spreadX: number
+  spreadY: number
+  rx: number
+  ry: number
+  rotBias: number
+}
+
+const BRUISE_ZONES: Record<BruiseZoneId, BruiseZoneDef> = {
+  leftCheek: {
+    cx: OVAL.cx - 0.52 * OVAL.rx,
+    cy: OVAL.cy + 0.06 * OVAL.ry,
+    spreadX: 0.07 * OVAL.rx,
+    spreadY: 0.055 * OVAL.ry,
+    rx: 0.3 * OVAL.rx,
+    ry: 0.24 * OVAL.ry,
+    rotBias: -0.22,
+  },
+  rightCheek: {
+    cx: OVAL.cx + 0.52 * OVAL.rx,
+    cy: OVAL.cy + 0.06 * OVAL.ry,
+    spreadX: 0.07 * OVAL.rx,
+    spreadY: 0.055 * OVAL.ry,
+    rx: 0.3 * OVAL.rx,
+    ry: 0.24 * OVAL.ry,
+    rotBias: 0.22,
+  },
+  leftEye: {
+    cx: MOUNT_LANDMARKS.leftEye.cx,
+    cy: MOUNT_LANDMARKS.leftEye.cy + 0.03 * OVAL.ry,
+    spreadX: 0.065 * OVAL.rx,
+    spreadY: 0.055 * OVAL.ry,
+    rx: 0.34 * OVAL.rx,
+    ry: 0.28 * OVAL.ry,
+    rotBias: -0.18,
+  },
+  rightEye: {
+    cx: MOUNT_LANDMARKS.rightEye.cx,
+    cy: MOUNT_LANDMARKS.rightEye.cy + 0.03 * OVAL.ry,
+    spreadX: 0.065 * OVAL.rx,
+    spreadY: 0.055 * OVAL.ry,
+    rx: 0.34 * OVAL.rx,
+    ry: 0.28 * OVAL.ry,
+    rotBias: 0.18,
+  },
+  forehead: {
+    cx: OVAL.cx,
+    cy: OVAL.cy - 0.33 * OVAL.ry,
+    spreadX: 0.15 * OVAL.rx,
+    spreadY: 0.07 * OVAL.ry,
+    rx: 0.3 * OVAL.rx,
+    ry: 0.2 * OVAL.ry,
+    rotBias: 0,
+  },
+}
+
+const BRUISE_ZONE_ORDER: BruiseZoneId[] = [
+  'leftCheek',
+  'rightCheek',
+  'leftEye',
+  'rightEye',
+  'forehead',
+]
+
+function bruiseZoneCounts(existing: readonly BruiseStamp[]): Record<BruiseZoneId, number> {
+  const counts: Record<BruiseZoneId, number> = {
+    leftCheek: 0,
+    rightCheek: 0,
+    leftEye: 0,
+    rightEye: 0,
+    forehead: 0,
+  }
+  for (const b of existing) counts[b.zone]++
+  return counts
+}
+
+/**
+ * Least-used zone, prioritising eyes → forehead → cheeks (upper-face damage).
+ */
+function pickBruiseZone(
+  side: number,
+  _index: number,
+  _seed: number,
+  existing: readonly BruiseStamp[],
+): BruiseZoneId {
+  const counts = bruiseZoneCounts(existing)
+  const minCount = Math.min(...BRUISE_ZONE_ORDER.map((z) => counts[z]))
+  const ties = BRUISE_ZONE_ORDER.filter((z) => counts[z] === minCount)
+
+  const priority: BruiseZoneId[] = [
+    side < 0 ? 'leftEye' : 'rightEye',
+    side < 0 ? 'rightEye' : 'leftEye',
+    'forehead',
+    side < 0 ? 'leftCheek' : 'rightCheek',
+    side < 0 ? 'rightCheek' : 'leftCheek',
+  ]
+
+  for (const z of priority) {
+    if (ties.includes(z)) return z
+  }
+  return ties[0] ?? 'forehead'
+}
+
+const BRUISE_ZONE_ALPHA: Record<BruiseZoneId, number> = {
+  leftCheek: 1,
+  rightCheek: 1,
+  leftEye: 1.38,
+  rightEye: 1.38,
+  forehead: 1.1,
+}
+
+/**
+ * Random bruise within cheekbone, forehead, or periorbital zones.
+ * Punch `side` (−1 left glove, +1 right) nudges tie-breaks toward same-side zones.
+ */
+export function bruiseStampFromHit(
+  side: number,
+  index: number,
+  existing: readonly BruiseStamp[] = [],
+): BruiseStamp {
+  const seed = (index * 7919 + side * 104729) | 0
+  const zone = pickBruiseZone(side, index, seed, existing)
+  const def = BRUISE_ZONES[zone]
+
+  const jx = (hash2(11, 22, seed) - 0.5) * 2 * def.spreadX
+  const jy = (hash2(33, 44, seed) - 0.5) * 2 * def.spreadY
+  const sizeVar = 0.88 + hash2(55, 66, seed) * 0.24
+  const baseAlpha = 0.48 + hash2(index, 12, seed) * 0.32
+
+  return {
+    cx: def.cx + jx,
+    cy: def.cy + jy,
+    rx: def.rx * sizeVar,
+    ry: def.ry * (0.9 + hash2(77, 88, seed) * 0.2),
+    rotation: def.rotBias + (hash2(99, 10, seed) - 0.5) * 0.35,
+    alpha: Math.min(0.88, baseAlpha * BRUISE_ZONE_ALPHA[zone]),
+    seed,
+    zone,
+  }
+}
+
 type BruiseBlob = {
   ox: number
   oy: number
@@ -271,10 +401,50 @@ type BruiseBlob = {
   weight: number
 }
 
-/** Overlapping blotches — main cheek + under-eye spill like arcade bruises. */
+function bruiseSideForZone(zone: BruiseZoneId): number {
+  if (zone.startsWith('left')) return -1
+  if (zone.startsWith('right')) return 1
+  return 0
+}
+
+/** Zone-specific blotches — cheek spill, periorbital ring, forehead smear. */
 function bruiseBlobsForStamp(stamp: BruiseStamp): BruiseBlob[] {
-  const side = stamp.cx >= OVAL.cx ? 1 : -1
   const s = stamp.seed
+  const side = bruiseSideForZone(stamp.zone) || (stamp.cx >= OVAL.cx ? 1 : -1)
+
+  if (stamp.zone === 'forehead') {
+    return [
+      { ox: 0, oy: 0, sx: 1.12, sy: 0.82, weight: 1 },
+      {
+        ox: (hash2(1, 2, s) - 0.5) * 0.38,
+        oy: -0.06 + hash2(3, 4, s) * 0.12,
+        sx: 0.58 + hash2(5, 6, s) * 0.2,
+        sy: 0.42 + hash2(7, 8, s) * 0.16,
+        weight: 0.5 + hash2(9, 10, s) * 0.28,
+      },
+    ]
+  }
+
+  if (stamp.zone === 'leftEye' || stamp.zone === 'rightEye') {
+    return [
+      { ox: 0, oy: 0, sx: 1.05, sy: 1.02, weight: 1 },
+      {
+        ox: side * (-0.04 + hash2(1, 2, s) * 0.1),
+        oy: 0.34 + hash2(3, 4, s) * 0.12,
+        sx: 0.82 + hash2(5, 6, s) * 0.14,
+        sy: 0.68 + hash2(7, 8, s) * 0.14,
+        weight: 0.92,
+      },
+      {
+        ox: side * (-0.22 + hash2(9, 10, s) * 0.1),
+        oy: -0.18 + hash2(11, 12, s) * 0.1,
+        sx: 0.58 + hash2(13, 14, s) * 0.14,
+        sy: 0.42 + hash2(15, 16, s) * 0.12,
+        weight: 0.62,
+      },
+    ]
+  }
+
   return [
     { ox: 0, oy: 0, sx: 1, sy: 1, weight: 1 },
     {
@@ -340,9 +510,23 @@ function sampleBruiseMask(
   return { mask, dist: bestDist, mottle }
 }
 
-function bruiseTint(dist: number, mottle: number, seed: number): [number, number, number] {
+function bruiseTint(
+  dist: number,
+  mottle: number,
+  seed: number,
+  zone: BruiseZoneId,
+): [number, number, number] {
   const n = fbm(dist * 2.6, mottle * 2.2, seed + 500)
   const t = Math.min(1, dist)
+  const isEye = zone === 'leftEye' || zone === 'rightEye'
+
+  if (isEye) {
+    if (t < 0.22) return [8 + n * 8, 3 + n * 4, 18 + n * 10]
+    if (t < 0.4) return [18 + n * 14, 8 + n * 6, 38 + n * 14]
+    if (t < 0.58) return [48 + n * 22, 16 + n * 12, 52 + n * 12]
+    if (t < 0.76) return [88 + n * 24, 32 + n * 18, 48 + n * 10]
+    return [128 + n * 22, 58 + n * 24, 46 + n * 12]
+  }
 
   if (t < 0.2) return [14 + n * 10, 6 + n * 5, 28 + n * 12]
   if (t < 0.36) return [28 + n * 16, 12 + n * 8, 48 + n * 16]
@@ -397,22 +581,26 @@ function paintBruise(
       const skinG = skinPx[pi + 1] ?? 0
       const skinB = skinPx[pi + 2] ?? 0
 
-      const [tintR, tintG, tintB] = bruiseTint(dist, mottle, stamp.seed)
+      const isEye = stamp.zone === 'leftEye' || stamp.zone === 'rightEye'
+      const [tintR, tintG, tintB] = bruiseTint(dist, mottle, stamp.seed, stamp.zone)
       let mulR = (skinR * tintR) / 255
       let mulG = (skinG * tintG) / 255
       let mulB = (skinB * tintB) / 255
 
       const coreDark = Math.max(0, 1 - dist * 2.2)
       if (coreDark > 0) {
-        const k = 1 - coreDark * 0.22
+        const darkAmt = isEye ? 0.26 : 0.16
+        const k = 1 - coreDark * darkAmt
         mulR *= k
         mulG *= k
         mulB *= k
       }
 
+      const blendCap = isEye ? 0.84 : 0.72
+      const blendBoost = isEye ? 0.2 : 0.16
       const blend = Math.min(
-        1,
-        mask * strength * (0.88 + (1 - Math.min(1, dist)) * 0.18),
+        blendCap,
+        mask * strength * (0.82 + (1 - Math.min(1, dist)) * blendBoost),
       )
       skinPx[pi] = Math.round(skinR + (mulR - skinR) * blend)
       skinPx[pi + 1] = Math.round(skinG + (mulG - skinG) * blend)
