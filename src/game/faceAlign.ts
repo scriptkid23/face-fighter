@@ -6,6 +6,30 @@ export const OVAL = {
   ry: 0.44,
 } as const
 
+/** Eye / mouth anchors — same coords as faceDepth + mount.png damage overlay. */
+export const MOUNT_LANDMARKS = {
+  leftEye: {
+    cx: OVAL.cx - 0.42 * OVAL.rx,
+    cy: OVAL.cy - 0.3 * OVAL.ry,
+    rx: 0.11,
+    ry: 0.075,
+  },
+  rightEye: {
+    cx: OVAL.cx + 0.42 * OVAL.rx,
+    cy: OVAL.cy - 0.3 * OVAL.ry,
+    rx: 0.11,
+    ry: 0.075,
+  },
+  mouth: {
+    cx: OVAL.cx,
+    cy: OVAL.cy + 0.3 * OVAL.ry,
+    /** Overlay width as a fraction of the oval width (matches mount.png draw). */
+    scaleX: 0.66,
+    rx: OVAL.rx * 0.66,
+    ry: 0.09,
+  },
+} as const
+
 export type OvalAlignParams = {
   /** Horizontal pan, −1 … 1 */
   panX: number

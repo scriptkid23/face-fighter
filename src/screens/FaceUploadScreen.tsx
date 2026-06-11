@@ -209,9 +209,9 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
           {error && <p className="upload-error">{error}</p>}
 
           <ul className="checklist">
-            <li>Mắt, mũi, miệng nằm gọn trong oval?</li>
-            <li>Trán và cằm chạm gần mép oval?</li>
-            <li>Preview bên phải trông giống mặt thật?</li>
+            <li>Hai mắt nằm gọn trong oval xanh?</li>
+            <li>Miệng nằm gọn trong oval đỏ (khớp răng sứt khi đấm)?</li>
+            <li>Trán và cằm chạm gần mép oval vàng?</li>
           </ul>
         </section>
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
-import { OVAL, drawAlignedImage, type OvalAlignParams } from '../game/faceAlign'
+import { MOUNT_LANDMARKS, OVAL, drawAlignedImage, type OvalAlignParams } from '../game/faceAlign'
 import './FaceAlignPanel.css'
 
 type FaceAlignPanelProps = {
@@ -157,13 +157,34 @@ export function FaceAlignPanel({
             ry={OVAL.ry * 100}
             className="align-oval-stroke"
           />
+          <ellipse
+            cx={MOUNT_LANDMARKS.leftEye.cx * 100}
+            cy={MOUNT_LANDMARKS.leftEye.cy * 100}
+            rx={MOUNT_LANDMARKS.leftEye.rx * 100}
+            ry={MOUNT_LANDMARKS.leftEye.ry * 100}
+            className="align-eye-guide"
+          />
+          <ellipse
+            cx={MOUNT_LANDMARKS.rightEye.cx * 100}
+            cy={MOUNT_LANDMARKS.rightEye.cy * 100}
+            rx={MOUNT_LANDMARKS.rightEye.rx * 100}
+            ry={MOUNT_LANDMARKS.rightEye.ry * 100}
+            className="align-eye-guide"
+          />
+          <ellipse
+            cx={MOUNT_LANDMARKS.mouth.cx * 100}
+            cy={MOUNT_LANDMARKS.mouth.cy * 100}
+            rx={MOUNT_LANDMARKS.mouth.rx * 100}
+            ry={MOUNT_LANDMARKS.mouth.ry * 100}
+            className="align-mouth-guide"
+          />
         </svg>
       </div>
 
       <p className="align-status">
         {faceDetected
-          ? 'Kéo ảnh hoặc dùng slider — cho mặt vừa khung oval vàng.'
-          : 'Đặt mặt vào oval vàng — kéo ảnh hoặc chỉnh slider.'}
+          ? 'Cho 2 mắt vào oval xanh — miệng vào oval đỏ (khớp mount khi bị đấm).'
+          : 'Đặt mắt (xanh) và miệng (đỏ) vào oval con — kéo ảnh hoặc chỉnh slider.'}
       </p>
 
       <label className="align-control">

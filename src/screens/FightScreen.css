@@ -102,7 +102,28 @@
 }
 
 .fight-splash.show span {
-  animation: fight-pop 0.55s cubic-bezier(0.2, 2.2, 0.3, 1) forwards;
+  animation: fight-splash-pop 1.35s ease-out forwards;
+}
+
+@keyframes fight-splash-pop {
+  0% {
+    transform: scale(0) rotate(-4deg);
+    opacity: 1;
+  }
+  20% {
+    transform: scale(1.15) rotate(-4deg);
+  }
+  32% {
+    transform: scale(1) rotate(-4deg);
+  }
+  72% {
+    transform: scale(1) rotate(-4deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.35) rotate(-2deg);
+    opacity: 0;
+  }
 }
 
 @keyframes fight-pop {

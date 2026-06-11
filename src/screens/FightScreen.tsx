@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { renderDamagedFace } from '../game/faceDamage'
 import type { ProcessedFaceImage } from '../game/faceImage'
 import { buildFaceMesh, buildSkullMesh } from '../game/fighterHead'
 import './FightScreen.css'
@@ -124,12 +125,29 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     headPivot.position.set(0, 2.25, 0)
     fighter.add(headPivot)
     let headBuilt = false
+    let faceMesh: THREE.Mesh | null = null
+    let baseFaceTex: THREE.Texture | null = null
 
     const loader = new THREE.TextureLoader()
     loader.load(face.previewUrl, (tex) => {
-      headPivot.add(buildSkullMesh(), buildFaceMesh(tex))
+      baseFaceTex = tex
+      faceMesh = buildFaceMesh(tex)
+      headPivot.add(buildSkullMesh(), faceMesh)
       headBuilt = true
     })
+
+    // Pre-bake the broken-teeth variant of the face texture.
+    let damagedFaceTex: THREE.CanvasTexture | null = null
+    void renderDamagedFace(face.previewUrl)
+      .then((c) => {
+        const tex = new THREE.CanvasTexture(c)
+        tex.colorSpace = THREE.SRGBColorSpace
+        tex.minFilter = THREE.LinearFilter
+        damagedFaceTex = tex
+      })
+      .catch(() => {
+        // mount.jpg missing/unreadable — teeth still fly, mouth stays intact.
+      })
 
     // Cartoon body
     {
@@ -207,6 +225,54 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       }
     }
 
+    // Flying teeth knocked out on hits
+    type Tooth = {
+      mesh: THREE.Mesh
+      vel: THREE.Vector3
+      spin: THREE.Vector3
+      life: number
+    }
+    const teeth: Tooth[] = []
+    const toothGeo = new THREE.BoxGeometry(0.09, 0.12, 0.06)
+    const toothMat = new THREE.MeshStandardMaterial({
+      color: 0xfff3da,
+      roughness: 0.35,
+    })
+    // Lips position on the head (texture v = 0.3 → just below pivot center).
+    const mouthLocal = new THREE.Vector3(0, -0.31, 0.75)
+    const toothSpawn = new THREE.Vector3()
+
+    function spawnTeeth(side: number, count: number) {
+      if (!headBuilt) return
+      toothSpawn.copy(mouthLocal).applyMatrix4(headPivot.matrixWorld)
+      for (let i = 0; i < count; i++) {
+        const m = new THREE.Mesh(toothGeo, toothMat)
+        m.position.copy(toothSpawn)
+        m.position.x += (Math.random() - 0.5) * 0.25
+        m.rotation.set(Math.random() * 2, Math.random() * 2, Math.random() * 2)
+        teeth.push({
+          mesh: m,
+          vel: new THREE.Vector3(
+            -side * (0.5 + Math.random() * 0.9) + (Math.random() - 0.5) * 0.8,
+            1.4 + Math.random() * 1.2,
+            1.2 + Math.random(),
+          ),
+          spin: new THREE.Vector3(
+            Math.random() * 10 - 5,
+            Math.random() * 10 - 5,
+            Math.random() * 10 - 5,
+          ),
+          life: 0,
+        })
+        scene.add(m)
+      }
+    }
+
+    function clearTeeth() {
+      for (const t of teeth) scene.remove(t.mesh)
+      teeth.length = 0
+    }
+
     // Player gloves
     type GloveUserData = {
       rest: THREE.Vector3
@@ -238,6 +304,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     let hp = 100
     let ko = false
     let started = false
+    let mouthBroken = false
     const headVel = { x: 0, y: 0, z: 0 }
     let squash = 0
     let shake = 0
@@ -280,6 +347,14 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       squash = 1
       shake = 1
       dizzy = Math.min(1, dizzy + (hp < 35 ? 0.6 : 0.25))
+      const firstBreak = !mouthBroken && damagedFaceTex !== null && faceMesh !== null
+      if (firstBreak && faceMesh && damagedFaceTex) {
+        mouthBroken = true
+        const mat = faceMesh.material as THREE.MeshStandardMaterial
+        mat.map = damagedFaceTex
+        mat.needsUpdate = true
+      }
+      spawnTeeth(side, firstBreak ? 3 : 1 + ((Math.random() * 2) | 0))
       if (flash) {
         flash.style.opacity = '0.55'
         window.setTimeout(() => {
@@ -309,6 +384,13 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       hp = 100
       ko = false
       dizzy = 0
+      mouthBroken = false
+      if (faceMesh && baseFaceTex) {
+        const mat = faceMesh.material as THREE.MeshStandardMaterial
+        mat.map = baseFaceTex
+        mat.needsUpdate = true
+      }
+      clearTeeth()
       if (hpFill) {
         hpFill.style.width = '100%'
         hpFill.style.background = 'linear-gradient(180deg,#7dff4d,#46d11f 55%,#2f9e0e)'
@@ -400,6 +482,21 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
         sp.position.set(Math.cos(a) * 0.95, 0.95 + Math.sin(t * 6 + i) * 0.07, Math.sin(a) * 0.6)
       })
 
+      for (let i = teeth.length - 1; i >= 0; i--) {
+        const tooth = teeth[i]
+        if (!tooth) continue
+        tooth.life += dt
+        tooth.vel.y -= dt * 4.5
+        tooth.mesh.position.addScaledVector(tooth.vel, dt)
+        tooth.mesh.rotation.x += tooth.spin.x * dt
+        tooth.mesh.rotation.y += tooth.spin.y * dt
+        tooth.mesh.rotation.z += tooth.spin.z * dt
+        if (tooth.life > 2 || tooth.mesh.position.y < -1.15) {
+          scene.remove(tooth.mesh)
+          teeth.splice(i, 1)
+        }
+      }
+
       const headWorld = new THREE.Vector3()
       myGloves.forEach((g) => {
         const u = g.userData as GloveUserData
@@ -444,6 +541,10 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       btnLeft?.removeEventListener('pointerdown', onPunchLeft)
       btnRight?.removeEventListener('pointerdown', onPunchRight)
       btnRematch?.removeEventListener('click', rematch)
+      clearTeeth()
+      toothGeo.dispose()
+      toothMat.dispose()
+      damagedFaceTex?.dispose()
       renderer.dispose()
     }
   }, [face.previewUrl])
