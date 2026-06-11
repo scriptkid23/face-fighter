@@ -1,7 +1,7 @@
 .align-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: var(--space-3);
 }
 
 .align-viewport {
@@ -9,12 +9,12 @@
   width: 100%;
   aspect-ratio: 1;
   overflow: hidden;
-  border-radius: 10px;
-  border: 3px solid #000;
-  background: #1a1208;
+  border: var(--border-width-lg) solid var(--border-color);
+  background: var(--bauhaus-foreground);
   cursor: grab;
   touch-action: none;
   user-select: none;
+  box-shadow: var(--shadow-md);
 }
 
 .align-viewport:active {
@@ -32,7 +32,7 @@
 .align-dim {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.58);
+  background: rgba(18, 18, 18, 0.55);
   pointer-events: none;
 }
 
@@ -41,29 +41,56 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+}
+
+.align-oval-hit {
+  fill: rgba(240, 192, 32, 0.06);
+  cursor: grab;
+}
+
+.align-oval-hit:active {
+  cursor: grabbing;
+}
+
+.align-handle {
+  fill: var(--bauhaus-yellow);
+  stroke: var(--border-color);
+  stroke-width: 0.35;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.align-handle-rotate {
+  fill: var(--bauhaus-blue);
+}
+
+.align-handle-scale {
+  fill: var(--bauhaus-red);
 }
 
 .align-oval-stroke {
-  fill: none;
-  stroke: #ffcc1d;
-  stroke-width: 1.8;
+  stroke: var(--bauhaus-yellow);
+  stroke-width: 2;
   stroke-dasharray: 5 4;
   vector-effect: non-scaling-stroke;
+  pointer-events: all;
 }
 
 .align-eye-guide {
-  fill: rgba(80, 220, 255, 0.12);
-  stroke: #50dcff;
-  stroke-width: 1.4;
+  fill: rgba(16, 64, 192, 0.15);
+  stroke: var(--bauhaus-blue);
+  stroke-width: 2;
   stroke-dasharray: 3 3;
   vector-effect: non-scaling-stroke;
 }
 
 .align-mouth-guide {
-  fill: rgba(255, 90, 90, 0.1);
-  stroke: #ff5a5a;
-  stroke-width: 1.4;
+  fill: rgba(208, 32, 32, 0.12);
+  stroke: var(--bauhaus-red);
+  stroke-width: 2;
   stroke-dasharray: 4 3;
   vector-effect: non-scaling-stroke;
 }
@@ -71,22 +98,24 @@
 .align-status {
   margin: 0;
   font-size: 0.8rem;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.5;
+  font-weight: 500;
 }
 
 .align-control {
   display: grid;
   grid-template-columns: 5.5rem 1fr;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.85);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .align-control input[type='range'] {
   width: 100%;
-  accent-color: #ffcc1d;
+  accent-color: var(--bauhaus-blue);
 }
 
 .align-redetect {

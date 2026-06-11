@@ -19,7 +19,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('Không đọc được ảnh'))
+    img.onerror = () => reject(new Error('Could not read image'))
     img.src = url
   })
 }
@@ -45,7 +45,6 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
     faceRef.current = face
   }, [face])
 
-  // Revoke only on unmount — not when face updates (same originalUrl is reused).
   useEffect(() => () => revokeFaceImage(faceRef.current), [])
 
   const applyAlignPreview = useCallback(
@@ -97,7 +96,7 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
       const img = await loadImage(face.originalUrl)
       const detected = await detectFaceAlign(img)
       if (!detected) {
-        setError('Không thấy mặt — kéo ảnh cho vừa oval thủ công.')
+        setError('No face detected — drag the image to fit the oval manually.')
         return
       }
       setAlign(detected.align)
@@ -112,7 +111,7 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
           : prev,
       )
     } catch {
-      setError('Lỗi nhận diện — căn thủ công vào oval.')
+      setError('Detection failed — align manually into the oval.')
     } finally {
       setAligning(false)
     }
@@ -127,7 +126,7 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
         const processed = await processFaceFile(file)
         replaceFace(processed)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Lỗi không xác định')
+        setError(e instanceof Error ? e.message : 'Unknown error')
       } finally {
         setLoading(false)
       }
@@ -152,18 +151,27 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
 
   return (
     <div className="upload-screen">
+      <nav className="upload-nav" aria-label="Site">
+        <div className="upload-logo" aria-hidden>
+          <span className="upload-logo-shape upload-logo-circle" />
+          <span className="upload-logo-shape upload-logo-square" />
+          <span className="upload-logo-shape upload-logo-triangle" />
+        </div>
+        <span className="upload-nav-title">Face Fighter</span>
+      </nav>
+
       <header className="upload-header">
-        <p className="upload-kicker">FACE FIGHTER HD</p>
-        <h1>Đặt mặt vào oval</h1>
+        <p className="upload-kicker">Face Fighter HD</p>
+        <h1>Align your face</h1>
         <p className="upload-sub">
-          Khung oval vàng cố định — kéo hoặc phóng to ảnh cho mặt vừa khung. Xong
-          thì xem preview bên phải.
+          Move, scale, and rotate the yellow frame to match your face. Adjust photo
+          zoom if needed. Preview the in-game look on the right.
         </p>
       </header>
 
       <div className="upload-grid">
         <section className="panel panel-source">
-          <h2>Căn mặt</h2>
+          <h2>Face alignment</h2>
 
           {!face ? (
             <div
@@ -177,12 +185,10 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
                 if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
               }}
             >
-              <span className="drop-icon" aria-hidden>
-                📷
-              </span>
-              <p className="drop-title">Kéo thả hoặc bấm để chọn ảnh</p>
-              <p className="drop-hint">Chọn ảnh có mặt rõ — sau đó đặt vào oval</p>
-              {loading && <p className="drop-loading">Đang tải…</p>}
+              <span className="drop-icon" aria-hidden>+</span>
+              <p className="drop-title">Drop or click to choose a photo</p>
+              <p className="drop-hint">Pick a clear face photo, then fit it into the oval</p>
+              {loading && <p className="drop-loading">Loading…</p>}
             </div>
           ) : (
             align && (
@@ -209,14 +215,14 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
           {error && <p className="upload-error">{error}</p>}
 
           <ul className="checklist">
-            <li>Hai mắt nằm gọn trong oval xanh?</li>
-            <li>Miệng nằm gọn trong oval đỏ (khớp răng sứt khi đấm)?</li>
-            <li>Trán và cằm chạm gần mép oval vàng?</li>
+            <li>Yellow frame covers forehead to chin?</li>
+            <li>Both eyes inside the blue guides?</li>
+            <li>Lips snug inside the red guide (not nose or chin)?</li>
           </ul>
         </section>
 
         <section className="panel panel-preview">
-          <h2>Preview in-game</h2>
+          <h2>In-game preview</h2>
           <div className="preview-stage">
             {face ? (
               <>
@@ -230,7 +236,7 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
               </>
             ) : (
               <div className="preview-placeholder">
-                <p>Upload ảnh rồi đặt mặt vào oval</p>
+                <p>Upload a photo and align your face into the oval</p>
               </div>
             )}
           </div>
@@ -241,14 +247,14 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
         <section className="controls panel">
           <div className="control-actions control-actions-full">
             <button type="button" className="btn btn-secondary" onClick={onPickAnother}>
-              Chọn ảnh khác
+              Choose another photo
             </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={() => onEnterFight(face)}
             >
-              Trông ổn — vào đấu
+              Looks good — fight!
             </button>
           </div>
         </section>

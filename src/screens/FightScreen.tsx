@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import { renderDamagedFace } from '../game/faceDamage'
+import {
+  bruiseStampFromHit,
+  mouthPivotLocalY,
+  renderFightFace,
+  type BruiseStamp,
+} from '../game/faceDamage'
 import type { ProcessedFaceImage } from '../game/faceImage'
 import { buildFaceMesh, buildSkullMesh } from '../game/fighterHead'
 import './FightScreen.css'
@@ -10,7 +15,13 @@ type FightScreenProps = {
   onBack: () => void
 }
 
-const HIT_WORDS = ['POW!', 'BAM!', 'BỐP!', 'OÁCH!', 'CHÁT!', 'BÙM!']
+const HIT_WORDS = ['POW!', 'BAM!', 'WHAM!', 'CRACK!', 'BOOM!', 'OUCH!']
+
+const BAUHAUS = {
+  blue: 0x1040c0,
+  red: 0xd02020,
+  yellow: 0xf0c020,
+}
 
 export function FightScreen({ face, onBack }: FightScreenProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -36,21 +47,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
     const scene = new THREE.Scene()
-    {
-      const bg = document.createElement('canvas')
-      bg.width = 2
-      bg.height = 256
-      const g = bg.getContext('2d')
-      if (g) {
-        const gr = g.createLinearGradient(0, 0, 0, 256)
-        gr.addColorStop(0, '#5ea0ef')
-        gr.addColorStop(0.55, '#2f64ad')
-        gr.addColorStop(1, '#1c3c6b')
-        g.fillStyle = gr
-        g.fillRect(0, 0, 2, 256)
-        scene.background = new THREE.CanvasTexture(bg)
-      }
-    }
+    scene.background = new THREE.Color(BAUHAUS.blue)
 
     const camera = new THREE.PerspectiveCamera(42, 2, 0.1, 100)
     camera.position.set(0, 1.55, 5.4)
@@ -70,9 +67,9 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       c.width = c.height = 256
       const g = c.getContext('2d')
       if (g) {
-        g.fillStyle = '#3da0e8'
+        g.fillStyle = '#3a6fd4'
         g.fillRect(0, 0, 256, 256)
-        g.strokeStyle = 'rgba(255,255,255,.25)'
+        g.strokeStyle = 'rgba(18,18,18,.2)'
         g.lineWidth = 6
         for (let i = 0; i <= 256; i += 64) {
           g.beginPath()
@@ -99,21 +96,21 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
 
     // Ropes + posts
     {
-      const ropeMat = new THREE.MeshStandardMaterial({ color: 0xe3342f, roughness: 0.5 })
+      const ropeMat = new THREE.MeshStandardMaterial({ color: BAUHAUS.red, roughness: 0.5 })
       for (let i = 0; i < 3; i++) {
         const r = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 16, 8), ropeMat)
         r.rotation.z = Math.PI / 2
         r.position.set(0, -0.4 + i * 0.55, -4.5)
         scene.add(r)
       }
-      const postMat = new THREE.MeshStandardMaterial({ color: 0x1f7ae0, roughness: 0.4 })
+      const postMat = new THREE.MeshStandardMaterial({ color: BAUHAUS.blue, roughness: 0.4 })
       for (const x of [-7.5, 7.5]) {
         const p = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 2.6, 12), postMat)
         p.position.set(x, 0.1, -4.5)
         scene.add(p)
         const ball = new THREE.Mesh(
           new THREE.SphereGeometry(0.26, 14, 12),
-          new THREE.MeshStandardMaterial({ color: 0xffcc1d }),
+          new THREE.MeshStandardMaterial({ color: BAUHAUS.yellow }),
         )
         ball.position.set(x, 1.45, -4.5)
         scene.add(ball)
@@ -136,24 +133,34 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       headBuilt = true
     })
 
-    // Pre-bake the broken-teeth variant of the face texture.
-    let damagedFaceTex: THREE.CanvasTexture | null = null
-    void renderDamagedFace(face.previewUrl)
-      .then((c) => {
-        const tex = new THREE.CanvasTexture(c)
-        tex.colorSpace = THREE.SRGBColorSpace
-        tex.minFilter = THREE.LinearFilter
-        damagedFaceTex = tex
-      })
-      .catch(() => {
-        // mount.jpg missing/unreadable — teeth still fly, mouth stays intact.
-      })
+    const bruises: BruiseStamp[] = []
+    let faceCanvasTex: THREE.CanvasTexture | null = null
+    let faceBakeGen = 0
+
+    function applyFaceTexture() {
+      const gen = ++faceBakeGen
+      void renderFightFace(face.previewUrl, { mouthBroken, bruises })
+        .then((c) => {
+          if (gen !== faceBakeGen) return
+          if (faceCanvasTex) faceCanvasTex.dispose()
+          faceCanvasTex = new THREE.CanvasTexture(c)
+          faceCanvasTex.colorSpace = THREE.SRGBColorSpace
+          faceCanvasTex.minFilter = THREE.LinearFilter
+          if (!faceMesh) return
+          const mat = faceMesh.material as THREE.MeshStandardMaterial
+          mat.map = faceCanvasTex
+          mat.needsUpdate = true
+        })
+        .catch(() => {
+          // Overlay assets missing — keep current texture.
+        })
+    }
 
     // Cartoon body
     {
       const skin = new THREE.MeshStandardMaterial({ color: 0xc89a72, roughness: 0.8 })
-      const shirt = new THREE.MeshStandardMaterial({ color: 0x18a558, roughness: 0.7 })
-      const gloveM = new THREE.MeshStandardMaterial({ color: 0x1f7ae0, roughness: 0.45 })
+      const shirt = new THREE.MeshStandardMaterial({ color: BAUHAUS.red, roughness: 0.7 })
+      const gloveM = new THREE.MeshStandardMaterial({ color: BAUHAUS.blue, roughness: 0.45 })
       const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.72, 1.5, 18), shirt)
       torso.position.y = 0.55
       torso.scale.z = 0.72
@@ -177,7 +184,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       }
       const belt = new THREE.Mesh(
         new THREE.TorusGeometry(0.7, 0.09, 10, 24),
-        new THREE.MeshStandardMaterial({ color: 0xffcc1d }),
+        new THREE.MeshStandardMaterial({ color: BAUHAUS.yellow }),
       )
       belt.rotation.x = Math.PI / 2
       belt.position.y = -0.18
@@ -185,7 +192,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       fighter.add(belt)
       const hips = new THREE.Mesh(
         new THREE.CylinderGeometry(0.7, 0.6, 0.8, 18),
-        new THREE.MeshStandardMaterial({ color: 0x202a3a, roughness: 0.8 }),
+        new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.8 }),
       )
       hips.position.y = -0.55
       hips.scale.z = 0.72
@@ -202,7 +209,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       const g = c.getContext('2d')
       if (g) {
         g.translate(32, 32)
-        g.fillStyle = '#ffcc1d'
+        g.fillStyle = '#f0c020'
         g.strokeStyle = '#000'
         g.lineWidth = 4
         g.beginPath()
@@ -239,7 +246,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       roughness: 0.35,
     })
     // Lips position on the head (texture v = 0.3 → just below pivot center).
-    const mouthLocal = new THREE.Vector3(0, -0.31, 0.75)
+    const mouthLocal = new THREE.Vector3(0, mouthPivotLocalY(), 0.75)
     const toothSpawn = new THREE.Vector3()
 
     function spawnTeeth(side: number, count: number) {
@@ -283,7 +290,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     }
     const myGloves: THREE.Group[] = []
     {
-      const red = new THREE.MeshStandardMaterial({ color: 0xe3342f, roughness: 0.4 })
+      const red = new THREE.MeshStandardMaterial({ color: BAUHAUS.red, roughness: 0.4 })
       const cuff = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
       for (const s of [-1, 1]) {
         const g = new THREE.Group()
@@ -335,10 +342,10 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       if (hpFill) {
         hpFill.style.width = `${hp}%`
         if (hp < 40) {
-          hpFill.style.background = 'linear-gradient(180deg,#ff9d4d,#e07a1f 55%,#9e520e)'
+          hpFill.style.background = '#f0c020'
         }
         if (hp < 18) {
-          hpFill.style.background = 'linear-gradient(180deg,#ff6b5e,#d11f1f 55%,#8a0e0e)'
+          hpFill.style.background = '#d02020'
         }
       }
       headVel.y += 0.5 + Math.random() * 0.3
@@ -347,14 +354,11 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       squash = 1
       shake = 1
       dizzy = Math.min(1, dizzy + (hp < 35 ? 0.6 : 0.25))
-      const firstBreak = !mouthBroken && damagedFaceTex !== null && faceMesh !== null
-      if (firstBreak && faceMesh && damagedFaceTex) {
-        mouthBroken = true
-        const mat = faceMesh.material as THREE.MeshStandardMaterial
-        mat.map = damagedFaceTex
-        mat.needsUpdate = true
-      }
-      spawnTeeth(side, firstBreak ? 3 : 1 + ((Math.random() * 2) | 0))
+      const firstMouthBreak = !mouthBroken
+      bruises.push(bruiseStampFromHit(side, bruises.length))
+      if (firstMouthBreak) mouthBroken = true
+      applyFaceTexture()
+      spawnTeeth(side, firstMouthBreak ? 3 : 1 + ((Math.random() * 2) | 0))
       if (flash) {
         flash.style.opacity = '0.55'
         window.setTimeout(() => {
@@ -385,6 +389,12 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       ko = false
       dizzy = 0
       mouthBroken = false
+      bruises.length = 0
+      faceBakeGen++
+      if (faceCanvasTex) {
+        faceCanvasTex.dispose()
+        faceCanvasTex = null
+      }
       if (faceMesh && baseFaceTex) {
         const mat = faceMesh.material as THREE.MeshStandardMaterial
         mat.map = baseFaceTex
@@ -393,7 +403,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       clearTeeth()
       if (hpFill) {
         hpFill.style.width = '100%'
-        hpFill.style.background = 'linear-gradient(180deg,#7dff4d,#46d11f 55%,#2f9e0e)'
+        hpFill.style.background = '#f0c020'
       }
       fighter.rotation.set(0, 0, 0)
       fighter.position.y = -0.55
@@ -544,7 +554,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       clearTeeth()
       toothGeo.dispose()
       toothMat.dispose()
-      damagedFaceTex?.dispose()
+      faceCanvasTex?.dispose()
       renderer.dispose()
     }
   }, [face.previewUrl])
@@ -557,7 +567,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
         <div className="fight-hp-row">
           <div ref={portraitRef} className="fight-portrait" />
           <div className="fight-hp-shell">
-            <div className="fight-hp-name">ĐỐI THỦ</div>
+            <div className="fight-hp-name">OPPONENT</div>
             <div className="fight-hp-bar">
               <div ref={hpRef} className="fight-hp-fill" />
             </div>
@@ -572,31 +582,31 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       <div ref={flashRef} className="fight-flash" />
 
       <p className="fight-hint">
-        Bấm nửa trái / phải màn hình hoặc 2 nút găng để đấm
+        Tap left or right side of the screen, or use the punch buttons
       </p>
 
       <div className="fight-btns">
         <button type="button" className="fight-punch" id="fight-pl">
-          ĐẤM
+          LEFT
           <br />
-          TRÁI
+          PUNCH
         </button>
         <button type="button" className="fight-punch" id="fight-pr">
-          ĐẤM
+          RIGHT
           <br />
-          PHẢI
+          PUNCH
         </button>
       </div>
 
       <div ref={koRef} className="fight-ko">
         <h2>K.O.!</h2>
         <button type="button" className="fight-rematch" id="fight-rematch">
-          Đấu lại
+          Rematch
         </button>
       </div>
 
       <button type="button" className="fight-back" onClick={onBack}>
-        ← Căn lại mặt
+        ← Re-align face
       </button>
     </div>
   )

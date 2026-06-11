@@ -1,10 +1,43 @@
-import { MOUNT_LANDMARKS, OVAL } from './faceAlign'
+import { LANDMARK_V, MOUNT_LANDMARKS, OVAL } from './faceAlign'
 
 const MOUTH_SRC = '/mount.png'
 const MOUTH_SRC_FALLBACK = '/mount.jpg'
 
+export type BruiseStamp = {
+  cx: number
+  cy: number
+  rx: number
+  ry: number
+  rotation: number
+  alpha: number
+  /** Stable seed for procedural bruise shape / mottle. */
+  seed: number
+}
+
+/**
+ * Cheekbone (zygomatic) bruise for a punch from `side` (−1 left glove, +1 right).
+ * Large, irregular patch on the cheek — may extend slightly under the eye.
+ */
+export function bruiseStampFromHit(side: number, index: number): BruiseStamp {
+  const cheekX = OVAL.cx + side * 0.52 * OVAL.rx
+  const cheekY = OVAL.cy + 0.02 * OVAL.ry
+  const jitterX = side * ((index * 0.19) % 1) * 0.035 * OVAL.rx
+  const jitterY = ((index * 0.27) % 1 - 0.5) * 0.04 * OVAL.ry
+
+  return {
+    cx: cheekX + jitterX,
+    cy: cheekY + jitterY,
+    rx: OVAL.rx * (0.32 + (index % 3) * 0.04),
+    ry: OVAL.ry * (0.26 + (index % 2) * 0.03),
+    rotation: side * 0.22 + (index % 4) * 0.05,
+    alpha: Math.min(0.82, 0.5 + (index % 5) * 0.06),
+    seed: (index * 7919 + side * 104729) | 0,
+  }
+}
+
 type MouthOverlay = {
   canvas: HTMLCanvasElement
+  /** Opaque mouth art bounds inside canvas (no checkerboard). */
   box: { x: number; y: number; w: number; h: number }
 }
 
@@ -12,128 +45,382 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('Không đọc được ảnh'))
+    img.onerror = () => reject(new Error('Could not read mouth overlay image'))
     img.src = url
   })
 }
 
-/** Bounding box of non-transparent pixels in a PNG overlay. */
-function extractAlphaOverlay(img: HTMLImageElement): MouthOverlay {
-  const w = img.naturalWidth
-  const h = img.naturalHeight
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas không khả dụng')
-  ctx.drawImage(img, 0, 0)
-  const id = ctx.getImageData(0, 0, w, h)
-  const px = id.data
-
-  let minX = w
-  let minY = h
-  let maxX = 0
-  let maxY = 0
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const a = px[(y * w + x) * 4 + 3] ?? 0
-      if (a < 20) continue
-      if (x < minX) minX = x
-      if (x > maxX) maxX = x
-      if (y < minY) minY = y
-      if (y > maxY) maxY = y
-    }
-  }
-  if (maxX <= minX || maxY <= minY) {
-    throw new Error('Không tách được miệng từ mount.png')
-  }
-  return {
-    canvas,
-    box: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 },
-  }
+function isBackdrop(r: number, g: number, b: number) {
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  return max - min < 35 && max > 140
 }
 
-/**
- * mount.jpg may bake a checkerboard into the pixels. Flood-fill from the
- * borders over light low-saturation pixels to key it out.
- */
-function keyOutCheckerboard(img: HTMLImageElement): MouthOverlay {
-  const w = img.naturalWidth
-  const h = img.naturalHeight
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas không khả dụng')
-  ctx.drawImage(img, 0, 0)
+/** Key out checkerboard / grey backdrop everywhere (not only border flood-fill). */
+function removeGlobalBackdrop(ctx: CanvasRenderingContext2D) {
+  const w = ctx.canvas.width
+  const h = ctx.canvas.height
   const id = ctx.getImageData(0, 0, w, h)
   const px = id.data
+  for (let i = 0; i < w * h; i++) {
+    const p = i * 4
+    const r = px[p] ?? 0
+    const g = px[p + 1] ?? 0
+    const b = px[p + 2] ?? 0
+    if (isBackdrop(r, g, b)) px[p + 3] = 0
+  }
+  ctx.putImageData(id, 0, 0)
+}
 
-  const isBackdrop = (p: number) => {
+/** Key out black matting fringe baked into mount.png edges. */
+function removeBlackFringe(ctx: CanvasRenderingContext2D) {
+  const w = ctx.canvas.width
+  const h = ctx.canvas.height
+  const id = ctx.getImageData(0, 0, w, h)
+  const px = id.data
+  for (let i = 0; i < w * h; i++) {
+    const p = i * 4
     const r = px[p] ?? 0
     const g = px[p + 1] ?? 0
     const b = px[p + 2] ?? 0
     const max = Math.max(r, g, b)
-    return max - Math.min(r, g, b) < 30 && max > 150
-  }
-
-  const visited = new Uint8Array(w * h)
-  const stack: number[] = []
-  const seed = (i: number) => {
-    if (!visited[i] && isBackdrop(i * 4)) {
-      visited[i] = 1
-      stack.push(i)
+    const min = Math.min(r, g, b)
+    if (max < 75) {
+      px[p + 3] = 0
+    } else if (max < 105 && max - min < 30) {
+      px[p + 3] = 0
     }
-  }
-  for (let x = 0; x < w; x++) {
-    seed(x)
-    seed((h - 1) * w + x)
-  }
-  for (let y = 0; y < h; y++) {
-    seed(y * w)
-    seed(y * w + w - 1)
-  }
-  while (stack.length > 0) {
-    const i = stack.pop()
-    if (i === undefined) break
-    const x = i % w
-    if (x > 0) seed(i - 1)
-    if (x < w - 1) seed(i + 1)
-    if (i >= w) seed(i - w)
-    if (i < w * (h - 1)) seed(i + w)
-  }
-
-  let minX = w
-  let minY = h
-  let maxX = 0
-  let maxY = 0
-  for (let i = 0; i < w * h; i++) {
-    if (visited[i]) {
-      px[i * 4 + 3] = 0
-      continue
-    }
-    const x = i % w
-    const y = (i / w) | 0
-    const nearBg =
-      (x > 0 && visited[i - 1]) ||
-      (x < w - 1 && visited[i + 1]) ||
-      (i >= w && visited[i - w]) ||
-      (i < w * (h - 1) && visited[i + w])
-    if (nearBg) px[i * 4 + 3] = ((px[i * 4 + 3] ?? 255) * 0.45) | 0
-    if (x < minX) minX = x
-    if (x > maxX) maxX = x
-    if (y < minY) minY = y
-    if (y > maxY) maxY = y
   }
   ctx.putImageData(id, 0, 0)
+}
 
-  if (maxX <= minX || maxY <= minY) {
-    throw new Error('Không tách được miệng từ mount.jpg')
+type Blob = { x: number; y: number; w: number; h: number; area: number }
+
+/** Largest opaque connected region — mouth art, not checkerboard islands. */
+function findMainMouthBlob(ctx: CanvasRenderingContext2D): Blob | null {
+  const w = ctx.canvas.width
+  const h = ctx.canvas.height
+  const id = ctx.getImageData(0, 0, w, h)
+  const px = id.data
+  const seen = new Uint8Array(w * h)
+  const blobs: Blob[] = []
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x
+      if (seen[i] || (px[i * 4 + 3] ?? 0) < 40) continue
+
+      let minX = x
+      let maxX = x
+      let minY = y
+      let maxY = y
+      let area = 0
+      const stack = [i]
+      seen[i] = 1
+
+      while (stack.length > 0) {
+        const cur = stack.pop()
+        if (cur === undefined) break
+        area++
+        const cx = cur % w
+        const cy = (cur / w) | 0
+        if (cx < minX) minX = cx
+        if (cx > maxX) maxX = cx
+        if (cy < minY) minY = cy
+        if (cy > maxY) maxY = cy
+
+        if (cx > 0 && !seen[cur - 1] && (px[(cur - 1) * 4 + 3] ?? 0) >= 40) {
+          seen[cur - 1] = 1
+          stack.push(cur - 1)
+        }
+        if (cx < w - 1 && !seen[cur + 1] && (px[(cur + 1) * 4 + 3] ?? 0) >= 40) {
+          seen[cur + 1] = 1
+          stack.push(cur + 1)
+        }
+        if (cy > 0 && !seen[cur - w] && (px[(cur - w) * 4 + 3] ?? 0) >= 40) {
+          seen[cur - w] = 1
+          stack.push(cur - w)
+        }
+        if (cy < h - 1 && !seen[cur + w] && (px[(cur + w) * 4 + 3] ?? 0) >= 40) {
+          seen[cur + w] = 1
+          stack.push(cur + w)
+        }
+      }
+
+      if (area > 80) {
+        blobs.push({
+          x: minX,
+          y: minY,
+          w: maxX - minX + 1,
+          h: maxY - minY + 1,
+          area,
+        })
+      }
+    }
   }
-  return {
-    canvas,
-    box: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 },
+
+  if (blobs.length === 0) return null
+  // Prefer the largest blob; tie-break toward lower image (mouth art sits low in mount strips).
+  return blobs.reduce((best, b) => {
+    if (b.area > best.area * 1.15) return b
+    if (best.area > b.area * 1.15) return best
+    return b.y > best.y ? b : best
+  })
+}
+
+function imageToMouthOverlay(img: HTMLImageElement): MouthOverlay {
+  const w = img.naturalWidth
+  const h = img.naturalHeight
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas unavailable')
+  ctx.drawImage(img, 0, 0)
+  removeGlobalBackdrop(ctx)
+  removeBlackFringe(ctx)
+
+  const blob = findMainMouthBlob(ctx)
+  if (!blob) throw new Error('Could not isolate mouth from overlay image')
+
+  return { canvas, box: blob }
+}
+
+/** Built-in broken-teeth art when mount.png / mount.jpg are missing. */
+function createProceduralMouthOverlay(): MouthOverlay {
+  const w = 220
+  const h = 90
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas unavailable')
+
+  ctx.clearRect(0, 0, w, h)
+
+  // Dark lip cavity
+  ctx.fillStyle = '#3a1510'
+  ctx.beginPath()
+  ctx.ellipse(w / 2, h * 0.42, w * 0.42, h * 0.34, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Gums
+  ctx.fillStyle = '#c44a3a'
+  ctx.fillRect(w * 0.18, h * 0.22, w * 0.64, h * 0.18)
+
+  // Broken teeth
+  ctx.fillStyle = '#fff4df'
+  ctx.strokeStyle = '#121212'
+  ctx.lineWidth = 2
+  const toothW = w * 0.09
+  const toothH = h * 0.34
+  for (let i = 0; i < 6; i++) {
+    const tx = w * 0.22 + i * (toothW + 4)
+    const skew = i % 2 === 0 ? 0 : 4
+    ctx.save()
+    ctx.translate(tx + toothW / 2, h * 0.52 + skew)
+    ctx.rotate(((i - 2.5) * 4 * Math.PI) / 180)
+    ctx.fillRect(-toothW / 2, -toothH / 2, toothW, toothH)
+    ctx.strokeRect(-toothW / 2, -toothH / 2, toothW, toothH)
+    ctx.restore()
   }
+
+  const blob = findMainMouthBlob(ctx)
+  if (!blob) throw new Error('Procedural mouth overlay failed')
+
+  return { canvas, box: blob }
+}
+
+function hash2(ix: number, iy: number, seed: number): number {
+  let h = (seed ^ Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263)) >>> 0
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0
+  return (h ^ (h >>> 16)) / 4294967296
+}
+
+function valueNoise(x: number, y: number, seed: number): number {
+  const ix = Math.floor(x)
+  const iy = Math.floor(y)
+  const fx = x - ix
+  const fy = y - iy
+  const ux = fx * fx * (3 - 2 * fx)
+  const uy = fy * fy * (3 - 2 * fy)
+  const a = hash2(ix, iy, seed)
+  const b = hash2(ix + 1, iy, seed)
+  const c = hash2(ix, iy + 1, seed)
+  const d = hash2(ix + 1, iy + 1, seed)
+  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy
+}
+
+function fbm(x: number, y: number, seed: number, octaves = 4): number {
+  let v = 0
+  let amp = 0.5
+  let freq = 1
+  for (let o = 0; o < octaves; o++) {
+    v += amp * valueNoise(x * freq, y * freq, seed + o * 131)
+    amp *= 0.52
+    freq *= 2.05
+  }
+  return v
+}
+
+type BruiseBlob = {
+  ox: number
+  oy: number
+  sx: number
+  sy: number
+  weight: number
+}
+
+/** Overlapping blotches — main cheek + under-eye spill like arcade bruises. */
+function bruiseBlobsForStamp(stamp: BruiseStamp): BruiseBlob[] {
+  const side = stamp.cx >= OVAL.cx ? 1 : -1
+  const s = stamp.seed
+  return [
+    { ox: 0, oy: 0, sx: 1, sy: 1, weight: 1 },
+    {
+      ox: side * (-0.2 + hash2(1, 2, s) * 0.1),
+      oy: -0.34 + hash2(3, 4, s) * 0.08,
+      sx: 0.64 + hash2(5, 6, s) * 0.14,
+      sy: 0.52 + hash2(7, 8, s) * 0.12,
+      weight: 0.78,
+    },
+    {
+      ox: side * (0.1 + hash2(9, 10, s) * 0.12),
+      oy: 0.14 + hash2(11, 12, s) * 0.1,
+      sx: 0.42 + hash2(13, 14, s) * 0.12,
+      sy: 0.34 + hash2(15, 16, s) * 0.1,
+      weight: 0.42 + hash2(17, 18, s) * 0.22,
+    },
+  ]
+}
+
+function sampleBruiseMask(
+  lx: number,
+  ly: number,
+  rx: number,
+  ry: number,
+  stamp: BruiseStamp,
+  blobs: BruiseBlob[],
+): { mask: number; dist: number; mottle: number } {
+  const seed = stamp.seed
+  const nx = lx / rx
+  const ny = ly / ry
+  let mask = 0
+  let bestDist = 2
+
+  for (const blob of blobs) {
+    const bnx = (nx - blob.ox) / blob.sx
+    const bny = (ny - blob.oy) / blob.sy
+    const ellDist = Math.sqrt(bnx * bnx + bny * bny)
+    bestDist = Math.min(bestDist, ellDist)
+
+    const warp =
+      fbm(bnx * 2.6 + seed * 0.003, bny * 2.6, seed) * 0.4 +
+      fbm(bnx * 5.4, bny * 5.4, seed + 41) * 0.16
+    const distorted = ellDist + warp - 0.14
+
+    if (distorted > 1.1) continue
+
+    const edgeFade = Math.max(0, 1 - Math.max(0, distorted - 0.38) / 0.72)
+    const speckle =
+      0.45 +
+      fbm(bnx * 7.8 + 3, bny * 7.8 + 1, seed + 77) * 0.4 +
+      fbm(bnx * 15, bny * 15, seed + 155) * 0.12
+    const core = Math.max(0, 1 - distorted * 1.7)
+    const blobMask = edgeFade * speckle * (0.32 + core * 0.68) * blob.weight
+    mask = Math.max(mask, blobMask)
+    bestDist = Math.min(bestDist, distorted)
+  }
+
+  const mottle =
+    0.48 +
+    fbm(nx * 4.5, ny * 4.5, seed + 300) * 0.36 +
+    fbm(nx * 9.5, ny * 9.5, seed + 401) * 0.14
+
+  return { mask, dist: bestDist, mottle }
+}
+
+function bruiseTint(dist: number, mottle: number, seed: number): [number, number, number] {
+  const n = fbm(dist * 2.6, mottle * 2.2, seed + 500)
+  const t = Math.min(1, dist)
+
+  if (t < 0.2) return [14 + n * 10, 6 + n * 5, 28 + n * 12]
+  if (t < 0.36) return [28 + n * 16, 12 + n * 8, 48 + n * 16]
+  if (t < 0.52) return [62 + n * 26, 22 + n * 14, 58 + n * 14]
+  if (t < 0.68) return [102 + n * 28, 36 + n * 20, 50 + n * 12]
+  if (t < 0.84) return [138 + n * 24, 68 + n * 26, 48 + n * 14]
+  return [165 + n * 22, 132 + n * 28, 58 + n * 18]
+}
+
+/**
+ * Procedural bruise: noise-mottled blotches multiplied into skin (no sprite image).
+ */
+function paintBruise(
+  ctx: CanvasRenderingContext2D,
+  stamp: BruiseStamp,
+  size: number,
+) {
+  const cx = stamp.cx * size
+  const cy = stamp.cy * size
+  const rx = stamp.rx * size
+  const ry = stamp.ry * size
+  if (rx < 2 || ry < 2) return
+
+  const cos = Math.cos(stamp.rotation)
+  const sin = Math.sin(stamp.rotation)
+  const strength = stamp.alpha
+  const blobs = bruiseBlobsForStamp(stamp)
+  const pad = Math.ceil(Math.max(rx, ry) * 0.22)
+  const x0 = Math.max(0, Math.floor(cx - rx - pad))
+  const y0 = Math.max(0, Math.floor(cy - ry - pad))
+  const x1 = Math.min(ctx.canvas.width, Math.ceil(cx + rx + pad))
+  const y1 = Math.min(ctx.canvas.height, Math.ceil(cy + ry + pad))
+  const regionW = x1 - x0
+  const regionH = y1 - y0
+  if (regionW <= 0 || regionH <= 0) return
+
+  const skin = ctx.getImageData(x0, y0, regionW, regionH)
+  const skinPx = skin.data
+
+  for (let py = 0; py < regionH; py++) {
+    for (let px = 0; px < regionW; px++) {
+      const wx = x0 + px - cx
+      const wy = y0 + py - cy
+      const lx = wx * cos + wy * sin
+      const ly = -wx * sin + wy * cos
+
+      const { mask, dist, mottle } = sampleBruiseMask(lx, ly, rx, ry, stamp, blobs)
+      if (mask < 0.02) continue
+
+      const pi = (py * regionW + px) * 4
+      const skinR = skinPx[pi] ?? 0
+      const skinG = skinPx[pi + 1] ?? 0
+      const skinB = skinPx[pi + 2] ?? 0
+
+      const [tintR, tintG, tintB] = bruiseTint(dist, mottle, stamp.seed)
+      let mulR = (skinR * tintR) / 255
+      let mulG = (skinG * tintG) / 255
+      let mulB = (skinB * tintB) / 255
+
+      const coreDark = Math.max(0, 1 - dist * 2.2)
+      if (coreDark > 0) {
+        const k = 1 - coreDark * 0.22
+        mulR *= k
+        mulG *= k
+        mulB *= k
+      }
+
+      const blend = Math.min(
+        1,
+        mask * strength * (0.88 + (1 - Math.min(1, dist)) * 0.18),
+      )
+      skinPx[pi] = Math.round(skinR + (mulR - skinR) * blend)
+      skinPx[pi + 1] = Math.round(skinG + (mulG - skinG) * blend)
+      skinPx[pi + 2] = Math.round(skinB + (mulB - skinB) * blend)
+    }
+  }
+
+  ctx.putImageData(skin, x0, y0)
 }
 
 let overlayPromise: Promise<MouthOverlay> | null = null
@@ -141,29 +428,40 @@ let overlayPromise: Promise<MouthOverlay> | null = null
 function getMouthOverlay(): Promise<MouthOverlay> {
   if (!overlayPromise) {
     overlayPromise = loadImage(MOUTH_SRC)
-      .then(extractAlphaOverlay)
-      .catch(() => loadImage(MOUTH_SRC_FALLBACK).then(keyOutCheckerboard))
+      .then(imageToMouthOverlay)
+      .catch(() => loadImage(MOUTH_SRC_FALLBACK).then(imageToMouthOverlay))
+      .catch(() => createProceduralMouthOverlay())
   }
   return overlayPromise
 }
 
-/** Face texture with the broken mouth composited over the lips. */
-export async function renderDamagedFace(
+export type FightFaceOptions = {
+  mouthBroken?: boolean
+  bruises?: BruiseStamp[]
+}
+
+/** Compose face texture with bruises and optional broken mouth. */
+export async function renderFightFace(
   previewUrl: string,
+  options: FightFaceOptions = {},
 ): Promise<HTMLCanvasElement> {
-  const [overlay, faceImg] = await Promise.all([
-    getMouthOverlay(),
-    loadImage(previewUrl),
-  ])
+  const mouthBroken = options.mouthBroken ?? false
+  const bruises = options.bruises ?? []
+
+  const loaders: Promise<unknown>[] = [loadImage(previewUrl)]
+  if (mouthBroken) loaders.push(getMouthOverlay())
+
+  const results = await Promise.all(loaders)
+  const faceImg = results[0] as HTMLImageElement
+  const mouthOverlay = mouthBroken ? (results[1] as MouthOverlay) : null
+
   const size = faceImg.naturalWidth
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas không khả dụng')
+  if (!ctx) throw new Error('Canvas unavailable')
   ctx.drawImage(faceImg, 0, 0, size, size)
-
-  const mouth = MOUNT_LANDMARKS.mouth
 
   ctx.save()
   ctx.beginPath()
@@ -178,19 +476,44 @@ export async function renderDamagedFace(
   )
   ctx.clip()
 
-  const destW = size * OVAL.rx * 2 * mouth.scaleX
-  const destH = (destW * overlay.box.h) / overlay.box.w
-  ctx.drawImage(
-    overlay.canvas,
-    overlay.box.x,
-    overlay.box.y,
-    overlay.box.w,
-    overlay.box.h,
-    size * mouth.cx - destW / 2,
-    size * mouth.cy - destH / 2,
-    destW,
-    destH,
-  )
+  for (const stamp of bruises) {
+    paintBruise(ctx, stamp, size)
+  }
+
+  if (mouthBroken && mouthOverlay) {
+    const mouth = MOUNT_LANDMARKS.mouth
+    const mouthCx = size * mouth.cx
+    const mouthCy = size * mouth.cy
+    const destW = size * mouth.rx * 2
+    const destH = size * mouth.ry * 2
+    const destX = mouthCx - destW / 2
+    const destY = mouthCy - destH / 2
+    ctx.drawImage(
+      mouthOverlay.canvas,
+      mouthOverlay.box.x,
+      mouthOverlay.box.y,
+      mouthOverlay.box.w,
+      mouthOverlay.box.h,
+      destX,
+      destY,
+      destW,
+      destH,
+    )
+  }
+
   ctx.restore()
   return canvas
+}
+
+/** Paste broken-mouth art exactly over the red lip guide on the face texture. */
+export async function renderDamagedFace(previewUrl: string): Promise<HTMLCanvasElement> {
+  return renderFightFace(previewUrl, { mouthBroken: true })
+}
+
+/** Mouth center in normalized texture coords (for 3D tuning). */
+export const MOUTH_TEXTURE_CY = OVAL.cy + LANDMARK_V.mouth * OVAL.ry
+
+/** Head-pivot Y for flying teeth — tuned to MOUTH_TEXTURE_CY. */
+export function mouthPivotLocalY(): number {
+  return (0.5 - MOUTH_TEXTURE_CY) * 0.735 - 0.232
 }

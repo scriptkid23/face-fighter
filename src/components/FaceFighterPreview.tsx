@@ -3,10 +3,10 @@ type FaceFighterPreviewProps = {
   label?: string
 }
 
-/** 2D in-game portrait preview — same comic frame style as the HTML prototype. */
+/** 2D in-game portrait preview — Bauhaus HUD frame. */
 export function FaceFighterPreview({
   imageUrl,
-  label = 'ĐỐI THỦ',
+  label = 'OPPONENT',
 }: FaceFighterPreviewProps) {
   return (
     <div className="ff-preview">
@@ -16,7 +16,7 @@ export function FaceFighterPreview({
           className="ff-portrait"
           style={{ backgroundImage: `url(${imageUrl})` }}
           role="img"
-          aria-label="Mặt đối thủ trong game"
+          aria-label="Opponent face in game"
         />
         <div className="ff-hp-shell">
           <div className="ff-name">{label}</div>
@@ -25,7 +25,7 @@ export function FaceFighterPreview({
           </div>
         </div>
       </div>
-      <p className="ff-caption">Texture dùng trong game — giống khung HUD gốc</p>
+      <p className="ff-caption">In-game texture — matches the fight HUD</p>
     </div>
   )
 }

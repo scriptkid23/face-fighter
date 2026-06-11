@@ -1,3 +1,5 @@
+@import './styles/bauhaus-tokens.css';
+
 *,
 *::before,
 *::after {
@@ -12,7 +14,10 @@ body,
 }
 
 body {
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-family);
+  font-weight: 500;
+  color: var(--bauhaus-foreground);
+  background: var(--bauhaus-bg);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
@@ -26,4 +31,73 @@ body {
 
 button {
   font: inherit;
+}
+
+/* Shared Bauhaus button primitives */
+.btn {
+  font-family: var(--font-family);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.65rem 1.1rem;
+  border-radius: 0;
+  border: var(--border-width) solid var(--border-color);
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-md);
+  transition:
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out,
+    background-color 0.15s ease-out;
+}
+
+.btn:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--bauhaus-blue);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--bauhaus-yellow);
+  color: var(--bauhaus-foreground);
+}
+
+.btn-secondary {
+  background: var(--bauhaus-red);
+  color: var(--bauhaus-white);
+}
+
+.btn-blue {
+  background: var(--bauhaus-blue);
+  color: var(--bauhaus-white);
+}
+
+.btn-outline {
+  background: var(--bauhaus-white);
+  color: var(--bauhaus-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

@@ -1,8 +1,8 @@
 .fight-screen {
   position: fixed;
   inset: 0;
-  background: #2a1c0e;
-  font-family: 'Arial Black', Impact, 'Segoe UI', sans-serif;
+  background: var(--bauhaus-foreground);
+  font-family: var(--font-family);
 }
 
 .fight-gl {
@@ -22,6 +22,8 @@
   padding: 10px 12px;
   pointer-events: none;
   z-index: 10;
+  border-bottom: var(--border-width-lg) solid var(--border-color);
+  background: var(--bauhaus-white);
 }
 
 .fight-hp-row {
@@ -35,12 +37,12 @@
 .fight-portrait {
   width: 58px;
   height: 58px;
-  border-radius: 10px;
-  border: 4px solid #ffcc1d;
-  background: #000 center / cover no-repeat;
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  border: var(--border-width-lg) solid var(--border-color);
+  background: var(--bauhaus-foreground) center / cover no-repeat;
+  box-shadow: var(--shadow-md);
   flex: none;
-  transform: rotate(-3deg);
+  filter: grayscale(1);
 }
 
 .fight-hp-shell {
@@ -48,37 +50,37 @@
 }
 
 .fight-hp-name {
-  color: #fff;
-  font-size: 14px;
-  letter-spacing: 1px;
-  text-shadow: 2px 2px 0 #000;
+  color: var(--bauhaus-foreground);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   margin-bottom: 4px;
-  transform: rotate(-1deg);
 }
 
 .fight-hp-bar {
   height: 26px;
-  background: #3a2a14;
-  border: 4px solid #000;
-  border-radius: 8px;
+  background: var(--bauhaus-muted);
+  border: var(--border-width-lg) solid var(--border-color);
   overflow: hidden;
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5), inset 0 3px 0 rgba(255, 255, 255, 0.15);
+  box-shadow: var(--shadow-sm);
 }
 
 .fight-hp-fill {
   height: 100%;
   width: 100%;
-  background: linear-gradient(180deg, #7dff4d, #46d11f 55%, #2f9e0e);
-  transition: width 0.18s cubic-bezier(0.2, 1.4, 0.4, 1);
-  border-right: 3px solid rgba(0, 0, 0, 0.35);
+  background: var(--bauhaus-yellow);
+  transition: width 0.18s ease-out, background-color 0.18s ease-out;
+  border-right: var(--border-width) solid var(--border-color);
 }
 
 .fight-round {
   text-align: center;
-  color: #ffcc1d;
-  font-size: 15px;
-  letter-spacing: 3px;
-  text-shadow: 2px 2px 0 #000;
+  color: var(--bauhaus-foreground);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   margin-top: 6px;
 }
 
@@ -94,11 +96,15 @@
 
 .fight-splash span {
   font-size: clamp(64px, 18vw, 150px);
-  color: #ffcc1d;
-  -webkit-text-stroke: 6px #000;
-  text-shadow: 0 10px 0 rgba(0, 0, 0, 0.45);
+  font-weight: 900;
+  color: var(--bauhaus-yellow);
+  -webkit-text-stroke: 4px var(--border-color);
+  paint-order: stroke fill;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 0.9;
   transform: scale(0);
-  letter-spacing: 2px;
+  box-shadow: none;
 }
 
 .fight-splash.show span {
@@ -137,9 +143,11 @@
   z-index: 25;
   pointer-events: none;
   font-size: 46px;
-  color: #fff;
-  -webkit-text-stroke: 4px #000;
-  text-shadow: 0 6px 0 rgba(0, 0, 0, 0.4);
+  font-weight: 900;
+  color: var(--bauhaus-white);
+  -webkit-text-stroke: 3px var(--border-color);
+  paint-order: stroke fill;
+  text-transform: uppercase;
   animation: fight-pow-anim 0.5s ease-out forwards;
 }
 
@@ -173,22 +181,25 @@
   width: 92px;
   height: 92px;
   border-radius: 50%;
-  border: 5px solid #000;
-  background: radial-gradient(circle at 32% 28%, #ff7a6b, #e3342f 60%, #8f1410);
-  color: #fff;
+  border: var(--border-width-lg) solid var(--border-color);
+  background: var(--bauhaus-red);
+  color: var(--bauhaus-white);
   font-family: inherit;
-  font-size: 15px;
-  letter-spacing: 1px;
-  box-shadow: 0 7px 0 #000, inset 0 4px 0 rgba(255, 255, 255, 0.35);
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  box-shadow: var(--shadow-lg);
   cursor: pointer;
-  transition: transform 0.07s;
-  -webkit-text-stroke: 1px #000;
-  text-shadow: 1px 2px 0 #000;
+  transition:
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out;
 }
 
 .fight-punch:active {
-  transform: translateY(5px);
-  box-shadow: 0 2px 0 #000;
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .fight-ko {
@@ -200,7 +211,7 @@
   align-items: center;
   justify-content: center;
   z-index: 40;
-  background: rgba(20, 10, 0, 0.55);
+  background: rgba(18, 18, 18, 0.72);
 }
 
 .fight-ko.show {
@@ -209,30 +220,37 @@
 
 .fight-ko h2 {
   font-size: clamp(60px, 16vw, 130px);
-  color: #e3342f;
-  -webkit-text-stroke: 6px #000;
-  text-shadow: 0 10px 0 rgba(0, 0, 0, 0.5);
+  font-weight: 900;
+  color: var(--bauhaus-red);
+  -webkit-text-stroke: 4px var(--border-color);
+  paint-order: stroke fill;
+  text-transform: uppercase;
   transform: rotate(-5deg);
-  animation: fight-pop 0.5s cubic-bezier(0.2, 2.2, 0.3, 1);
+  animation: fight-pop 0.5s ease-out;
   margin: 0;
+  line-height: 0.9;
 }
 
 .fight-rematch {
   font-family: inherit;
-  font-size: 20px;
+  font-weight: 700;
+  font-size: 18px;
   padding: 14px 34px;
-  border-radius: 14px;
-  border: 5px solid #000;
-  background: linear-gradient(180deg, #ffe263, #ffcc1d);
-  box-shadow: 0 6px 0 #000;
+  border: var(--border-width-lg) solid var(--border-color);
+  background: var(--bauhaus-yellow);
+  box-shadow: var(--shadow-lg);
   cursor: pointer;
-  letter-spacing: 1px;
-  color: #000;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bauhaus-foreground);
+  transition:
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out;
 }
 
 .fight-rematch:active {
-  transform: translateY(4px);
-  box-shadow: 0 2px 0 #000;
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .fight-hint {
@@ -241,20 +259,20 @@
   width: 100%;
   text-align: center;
   z-index: 15;
-  color: #fff;
-  font-size: 13px;
-  text-shadow: 1px 1px 0 #000;
-  letter-spacing: 1px;
-  font-family: 'Segoe UI', sans-serif;
-  opacity: 0.85;
+  color: var(--bauhaus-white);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   pointer-events: none;
   margin: 0;
+  opacity: 0.9;
 }
 
 .fight-flash {
   position: absolute;
   inset: 0;
-  background: #fff;
+  background: var(--bauhaus-white);
   opacity: 0;
   pointer-events: none;
   z-index: 18;
@@ -262,21 +280,25 @@
 
 .fight-back {
   position: absolute;
-  top: 12px;
+  top: 72px;
   right: 12px;
   z-index: 35;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
+  font-weight: 700;
   padding: 0.45rem 0.75rem;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  border-radius: 8px;
-  border: 3px solid #000;
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  border: var(--border-width) solid var(--border-color);
+  background: var(--bauhaus-white);
+  color: var(--bauhaus-foreground);
   cursor: pointer;
-  box-shadow: 0 3px 0 #000;
+  box-shadow: var(--shadow-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition:
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out;
 }
 
 .fight-back:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #000;
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }

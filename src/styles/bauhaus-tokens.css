@@ -1,0 +1,38 @@
+:root {
+  /* Colors */
+  --bauhaus-bg: #f0f0f0;
+  --bauhaus-foreground: #121212;
+  --bauhaus-red: #d02020;
+  --bauhaus-blue: #1040c0;
+  --bauhaus-yellow: #f0c020;
+  --bauhaus-muted: #e0e0e0;
+  --bauhaus-white: #ffffff;
+  --bauhaus-accent-open: #fff9c4;
+
+  /* Typography */
+  --font-family: 'Outfit', system-ui, sans-serif;
+
+  /* Borders */
+  --border-color: #121212;
+  --border-width: 2px;
+  --border-width-lg: 4px;
+
+  /* Hard shadows */
+  --shadow-sm: 3px 3px 0 0 #121212;
+  --shadow-md: 4px 4px 0 0 #121212;
+  --shadow-lg: 6px 6px 0 0 #121212;
+  --shadow-xl: 8px 8px 0 0 #121212;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --border-width: 4px;
+  }
+}

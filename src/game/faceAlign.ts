@@ -1,4 +1,4 @@
-/** Fixed oval guide — normalized to a square viewport (0–1). */
+/** Canonical oval in exported texture / game UV space (normalized 0–1). */
 export const OVAL = {
   cx: 0.5,
   cy: 0.46,
@@ -6,47 +6,145 @@ export const OVAL = {
   ry: 0.44,
 } as const
 
-/** Eye / mouth anchors — same coords as faceDepth + mount.png damage overlay. */
+/**
+ * Vertical offsets from oval center along the faceDepth v-axis (positive = toward chin).
+ * Eyes match depthAt eye bumps (v ≈ 0.3). Mouth matches lip relief (v ≈ 0.55–0.8) and
+ * anthropometric stomion (~34% of lower face below subnasale, Farkas sn–sto:sto–me 30:70).
+ */
+export const LANDMARK_V = {
+  eye: 0.3,
+  mouth: 0.64,
+} as const
+
+/** Eye / mouth anchors relative to canonical oval — faceDepth + mount overlay. */
 export const MOUNT_LANDMARKS = {
   leftEye: {
     cx: OVAL.cx - 0.42 * OVAL.rx,
-    cy: OVAL.cy - 0.3 * OVAL.ry,
+    cy: OVAL.cy - LANDMARK_V.eye * OVAL.ry,
     rx: 0.11,
     ry: 0.075,
   },
   rightEye: {
     cx: OVAL.cx + 0.42 * OVAL.rx,
-    cy: OVAL.cy - 0.3 * OVAL.ry,
+    cy: OVAL.cy - LANDMARK_V.eye * OVAL.ry,
     rx: 0.11,
     ry: 0.075,
   },
   mouth: {
     cx: OVAL.cx,
-    cy: OVAL.cy + 0.3 * OVAL.ry,
-    /** Overlay width as a fraction of the oval width (matches mount.png draw). */
-    scaleX: 0.66,
-    rx: OVAL.rx * 0.66,
-    ry: 0.09,
+    cy: OVAL.cy + LANDMARK_V.mouth * OVAL.ry,
+    /** Red guide + in-game mouth effect (same size). */
+    rx: OVAL.rx * 0.48,
+    ry: 0.07,
   },
 } as const
 
 export type OvalAlignParams = {
-  /** Horizontal pan, −1 … 1 */
+  /** Image pan, −1 … 1 */
   panX: number
-  /** Vertical pan, −1 … 1 */
   panY: number
-  /** Zoom on top of fit-to-frame, 0.55 … 2.8 */
+  /** Image zoom on top of fit-to-frame, 0.55 … 2.8 */
   zoom: number
+  /** Oval frame offset from default center (normalized viewport). */
+  ovalPanX: number
+  ovalPanY: number
+  /** Uniform scale on oval radii, 0.55 … 1.85 */
+  ovalScale: number
+  /** Oval rotation in radians, −π … π */
+  ovalRotation: number
 }
 
 export const DEFAULT_OVAL_ALIGN: OvalAlignParams = {
   panX: 0,
   panY: 0,
   zoom: 1,
+  ovalPanX: 0,
+  ovalPanY: 0,
+  ovalScale: 1,
+  ovalRotation: 0,
+}
+
+export type EffectiveOval = {
+  cx: number
+  cy: number
+  rx: number
+  ry: number
+  rotation: number
+}
+
+export type EffectiveLandmark = {
+  cx: number
+  cy: number
+  rx: number
+  ry: number
 }
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
+}
+
+type Mat2 = { a: number; b: number; c: number; d: number }
+
+function ovalLinear(rot: number, rx: number, ry: number): Mat2 {
+  const c = Math.cos(rot)
+  const s = Math.sin(rot)
+  return { a: c * rx, b: s * rx, c: -s * ry, d: c * ry }
+}
+
+function inv2x2(m: Mat2): Mat2 {
+  const det = m.a * m.d - m.b * m.c
+  if (Math.abs(det) < 1e-8) return { a: 1, b: 0, c: 0, d: 1 }
+  return { a: m.d / det, b: -m.b / det, c: -m.c / det, d: m.a / det }
+}
+
+function mul2x2(m1: Mat2, m2: Mat2): Mat2 {
+  return {
+    a: m1.a * m2.a + m1.c * m2.b,
+    b: m1.b * m2.a + m1.d * m2.b,
+    c: m1.a * m2.c + m1.c * m2.d,
+    d: m1.b * m2.c + m1.d * m2.d,
+  }
+}
+
+/** User-adjustable oval frame in viewport pixels. */
+export function effectiveOval(align: OvalAlignParams, size: number): EffectiveOval {
+  const scale = clamp(align.ovalScale, 0.55, 1.85)
+  return {
+    cx: size * (OVAL.cx + align.ovalPanX),
+    cy: size * (OVAL.cy + align.ovalPanY),
+    rx: size * OVAL.rx * scale,
+    ry: size * OVAL.ry * scale,
+    rotation: align.ovalRotation,
+  }
+}
+
+/** Eye / mouth guides following the transformed oval frame. */
+export function effectiveLandmarks(align: OvalAlignParams, size: number): {
+  leftEye: EffectiveLandmark
+  rightEye: EffectiveLandmark
+  mouth: EffectiveLandmark
+} {
+  const o = effectiveOval(align, size)
+  const scale = clamp(align.ovalScale, 0.55, 1.85)
+  const cos = Math.cos(o.rotation)
+  const sin = Math.sin(o.rotation)
+
+  function mapLocal(lx: number, ly: number, lrx: number, lry: number): EffectiveLandmark {
+    const px = lx * o.rx
+    const py = ly * o.ry
+    return {
+      cx: o.cx + px * cos - py * sin,
+      cy: o.cy + px * sin + py * cos,
+      rx: size * lrx * scale,
+      ry: size * lry * scale,
+    }
+  }
+
+  return {
+    leftEye: mapLocal(-0.42, -LANDMARK_V.eye, MOUNT_LANDMARKS.leftEye.rx, MOUNT_LANDMARKS.leftEye.ry),
+    rightEye: mapLocal(0.42, -LANDMARK_V.eye, MOUNT_LANDMARKS.rightEye.rx, MOUNT_LANDMARKS.rightEye.ry),
+    mouth: mapLocal(0, LANDMARK_V.mouth, MOUNT_LANDMARKS.mouth.rx, MOUNT_LANDMARKS.mouth.ry),
+  }
 }
 
 /** Image draw rect in viewport pixels (square side = viewportSize). */
@@ -81,9 +179,24 @@ export function drawAlignedImage(
   ctx.drawImage(img, left, top, drawW, drawH)
 }
 
+/** Dim everything outside the transformed oval frame. */
+export function drawOvalDim(
+  ctx: CanvasRenderingContext2D,
+  viewportSize: number,
+  align: OvalAlignParams,
+) {
+  const o = effectiveOval(align, viewportSize)
+  ctx.save()
+  ctx.fillStyle = 'rgba(18, 18, 18, 0.55)'
+  ctx.beginPath()
+  ctx.rect(0, 0, viewportSize, viewportSize)
+  ctx.ellipse(o.cx, o.cy, o.rx, o.ry, o.rotation, 0, Math.PI * 2)
+  ctx.fill('evenodd')
+  ctx.restore()
+}
+
 /**
- * Render square portrait: crop exactly what sits inside the yellow oval guide.
- * Uses the same placement math as the alignment viewport (WYSIWYG).
+ * Render square portrait: remap the user oval frame onto the canonical game oval.
  */
 export function renderOvalPortrait(
   img: HTMLImageElement,
@@ -96,22 +209,35 @@ export function renderOvalPortrait(
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Canvas unavailable')
 
-  const cx = outSize * OVAL.cx
-  const cy = outSize * OVAL.cy
-  const rx = outSize * OVAL.rx
-  const ry = outSize * OVAL.ry
+  const vp = document.createElement('canvas')
+  vp.width = outSize
+  vp.height = outSize
+  const vpCtx = vp.getContext('2d')
+  if (!vpCtx) throw new Error('Canvas unavailable')
+  drawAlignedImage(vpCtx, img, outSize, align)
+
+  const user = effectiveOval(align, outSize)
+  const canon = effectiveOval(DEFAULT_OVAL_ALIGN, outSize)
+
+  const userL = ovalLinear(user.rotation, user.rx, user.ry)
+  const canonL = ovalLinear(canon.rotation, canon.rx, canon.ry)
+  const A = mul2x2(canonL, inv2x2(userL))
 
   ctx.save()
   ctx.beginPath()
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+  ctx.ellipse(canon.cx, canon.cy, canon.rx, canon.ry, canon.rotation, 0, Math.PI * 2)
   ctx.clip()
-  drawAlignedImage(ctx, img, outSize, align)
+
+  const e = canon.cx - (A.a * user.cx + A.c * user.cy)
+  const f = canon.cy - (A.b * user.cx + A.d * user.cy)
+  ctx.setTransform(A.a, A.b, A.c, A.d, e, f)
+  ctx.drawImage(vp, 0, 0, outSize, outSize)
   ctx.restore()
 
   return canvas
 }
 
-/** Fit detected face bbox into the fixed oval. */
+/** Place the movable oval frame on a detected face (image stays centered). */
 export function alignFromFaceBox(
   imgWidth: number,
   imgHeight: number,
@@ -121,26 +247,29 @@ export function alignFromFaceBox(
   const faceCx = box.originX + box.width / 2
   const faceCy = box.originY + box.height / 2 - box.height * 0.06
 
-  const ovalH = viewport * OVAL.ry * 2
-  const targetFaceH = box.height * 1.15
-  let zoom = (ovalH / targetFaceH) * 0.95
-  zoom = clamp(zoom, 0.65, 2.4)
+  const fit = Math.min(viewport / imgWidth, viewport / imgHeight)
+  const drawW = imgWidth * fit
+  const drawH = imgHeight * fit
+  const left = (viewport - drawW) / 2
+  const top = (viewport - drawH) / 2
+  const faceVpX = left + (faceCx / imgWidth) * drawW
+  const faceVpY = top + (faceCy / imgHeight) * drawH
 
-  const { left, top, drawW, drawH } = imageDrawRect(imgWidth, imgHeight, viewport, {
+  const ovalPanX = faceVpX / viewport - OVAL.cx
+  const ovalPanY = faceVpY / viewport - OVAL.cy
+
+  const faceH = box.height * fit
+  const ovalScale = clamp((faceH * 1.12) / (viewport * OVAL.ry * 2), 0.65, 1.5)
+
+  return {
     panX: 0,
     panY: 0,
-    zoom,
-  })
-
-  const ovalCx = viewport * OVAL.cx
-  const ovalCy = viewport * OVAL.cy
-  const faceScreenX = left + (faceCx / imgWidth) * drawW
-  const faceScreenY = top + (faceCy / imgHeight) * drawH
-
-  const panX = clamp((ovalCx - faceScreenX) / (viewport * 0.42), -1, 1)
-  const panY = clamp((ovalCy - faceScreenY) / (viewport * 0.42), -1, 1)
-
-  return { panX, panY, zoom }
+    zoom: 1,
+    ovalPanX: clamp(ovalPanX, -0.35, 0.35),
+    ovalPanY: clamp(ovalPanY, -0.35, 0.35),
+    ovalScale,
+    ovalRotation: 0,
+  }
 }
 
 export function clampOvalAlign(align: OvalAlignParams): OvalAlignParams {
@@ -148,5 +277,9 @@ export function clampOvalAlign(align: OvalAlignParams): OvalAlignParams {
     panX: clamp(align.panX, -1, 1),
     panY: clamp(align.panY, -1, 1),
     zoom: clamp(align.zoom, 0.55, 2.8),
+    ovalPanX: clamp(align.ovalPanX ?? 0, -0.35, 0.35),
+    ovalPanY: clamp(align.ovalPanY ?? 0, -0.35, 0.35),
+    ovalScale: clamp(align.ovalScale ?? 1, 0.55, 1.85),
+    ovalRotation: clamp(align.ovalRotation ?? 0, -Math.PI, Math.PI),
   }
 }

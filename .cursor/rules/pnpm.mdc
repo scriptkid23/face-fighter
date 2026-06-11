@@ -1,0 +1,41 @@
+---
+description: Use pnpm as the package manager for this project
+alwaysApply: true
+---
+
+# Package Manager: pnpm
+
+This project uses **pnpm**. Never use `npm`, `yarn`, or `bun` for installs, scripts, or lockfile changes.
+
+## Commands
+
+| Task | Command |
+|------|---------|
+| Install dependencies | `pnpm install` |
+| Add dependency | `pnpm add <pkg>` |
+| Add dev dependency | `pnpm add -D <pkg>` |
+| Remove dependency | `pnpm remove <pkg>` |
+| Run a script | `pnpm run <script>` or `pnpm <script>` |
+| Update lockfile | `pnpm install` (after editing `package.json`) |
+
+## Rules
+
+- Use `pnpm-lock.yaml` as the lockfile — do not create or commit `package-lock.json` or `yarn.lock`.
+- When adding packages in shell commands or docs, always show the `pnpm` equivalent.
+- For monorepo-style filters (if added later): `pnpm --filter <pkg> <command>`.
+- Prefer `pnpm exec <bin>` (or `pnpm dlx <pkg>` for one-off CLIs) instead of `npx`.
+
+## Examples
+
+```bash
+# ✅ GOOD
+pnpm install
+pnpm add three
+pnpm run dev
+pnpm run build
+
+# ❌ BAD
+npm install
+yarn add three
+npx vite build
+```
