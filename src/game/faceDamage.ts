@@ -2,7 +2,6 @@ import { LANDMARK_V, MOUNT_LANDMARKS, OVAL } from './faceAlign'
 
 const MOUTH_SRC = '/mount.png'
 const MOUTH_SRC_FALLBACK = '/mount.jpg'
-const EYE_SRC = '/eye.png'
 
 export type BruiseZoneId =
   | 'leftCheek'
@@ -612,50 +611,94 @@ function paintBruise(
   ctx.putImageData(skin, x0, y0)
 }
 
-function cleanEyeSprite(img: HTMLImageElement): HTMLCanvasElement {
-  const canvas = document.createElement('canvas')
-  canvas.width = img.naturalWidth
-  canvas.height = img.naturalHeight
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas unavailable')
-  ctx.drawImage(img, 0, 0)
-  removeGlobalBackdrop(ctx)
-  return canvas
+function meanOpaqueColor(data: Uint8ClampedArray): {
+  r: number
+  g: number
+  b: number
+  n: number
+} {
+  let r = 0
+  let g = 0
+  let b = 0
+  let n = 0
+  // Sample every other pixel; skip transparency, deep shadow and blown highlights.
+  for (let i = 0; i < data.length; i += 8) {
+    if ((data[i + 3] ?? 0) < 200) continue
+    const pr = data[i] ?? 0
+    const pg = data[i + 1] ?? 0
+    const pb = data[i + 2] ?? 0
+    const max = Math.max(pr, pg, pb)
+    if (max < 30 || max > 240) continue
+    r += pr
+    g += pg
+    b += pb
+    n++
+  }
+  return n > 0 ? { r: r / n, g: g / n, b: b / n, n } : { r: 0, g: 0, b: 0, n: 0 }
 }
 
-let eyeSpritePromise: Promise<HTMLCanvasElement> | null = null
+/**
+ * Tint the mouth overlay toward the skin it will cover: per-channel gain from
+ * the mean of the covered face region vs the overlay's own mean, so the stock
+ * lips inherit the player's skin tone and exposure. Teeth (bright, low
+ * saturation) take a reduced correction so they stay whitish instead of being
+ * dyed skin-colored. Returns a box-cropped canvas ready to draw.
+ */
+function colorMatchedMouth(
+  overlay: MouthOverlay,
+  faceCtx: CanvasRenderingContext2D,
+  dest: { x: number; y: number; w: number; h: number },
+): HTMLCanvasElement {
+  const out = document.createElement('canvas')
+  out.width = overlay.box.w
+  out.height = overlay.box.h
+  const octx = out.getContext('2d')
+  if (!octx) throw new Error('Canvas unavailable')
+  octx.drawImage(
+    overlay.canvas,
+    overlay.box.x,
+    overlay.box.y,
+    overlay.box.w,
+    overlay.box.h,
+    0,
+    0,
+    overlay.box.w,
+    overlay.box.h,
+  )
 
-function getEyeSprite(): Promise<HTMLCanvasElement> {
-  if (!eyeSpritePromise) {
-    eyeSpritePromise = loadImage(EYE_SRC).then(cleanEyeSprite)
+  const x0 = Math.max(0, Math.floor(dest.x))
+  const y0 = Math.max(0, Math.floor(dest.y))
+  const x1 = Math.min(faceCtx.canvas.width, Math.ceil(dest.x + dest.w))
+  const y1 = Math.min(faceCtx.canvas.height, Math.ceil(dest.y + dest.h))
+  if (x1 - x0 < 8 || y1 - y0 < 8) return out
+
+  const target = meanOpaqueColor(
+    faceCtx.getImageData(x0, y0, x1 - x0, y1 - y0).data,
+  )
+  const id = octx.getImageData(0, 0, out.width, out.height)
+  const source = meanOpaqueColor(id.data)
+  if (target.n < 40 || source.n < 40) return out
+
+  const clampGain = (v: number) => Math.max(0.45, Math.min(1.8, v))
+  const gr = clampGain(target.r / Math.max(1, source.r))
+  const gg = clampGain(target.g / Math.max(1, source.g))
+  const gb = clampGain(target.b / Math.max(1, source.b))
+
+  const px = id.data
+  for (let i = 0; i < px.length; i += 4) {
+    if ((px[i + 3] ?? 0) === 0) continue
+    const r = px[i] ?? 0
+    const g = px[i + 1] ?? 0
+    const b = px[i + 2] ?? 0
+    const max = Math.max(r, g, b)
+    const sat = max > 0 ? (max - Math.min(r, g, b)) / max : 0
+    const w = max > 170 && sat < 0.22 ? 0.55 : 0.92
+    px[i] = Math.min(255, Math.round(r * (1 + (gr - 1) * w)))
+    px[i + 1] = Math.min(255, Math.round(g * (1 + (gg - 1) * w)))
+    px[i + 2] = Math.min(255, Math.round(b * (1 + (gb - 1) * w)))
   }
-  return eyeSpritePromise
-}
-
-function paintEyeOverlay(
-  ctx: CanvasRenderingContext2D,
-  sprite: HTMLCanvasElement,
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-  size: number,
-  flipX = false,
-) {
-  const w = rx * 2.2 * size
-  const h = ry * 2.7 * size
-  const x = cx * size - w / 2
-  const y = cy * size - h / 2
-
-  ctx.save()
-  if (flipX) {
-    ctx.translate(x + w / 2, y + h / 2)
-    ctx.scale(-1, 1)
-    ctx.drawImage(sprite, -w / 2, -h / 2, w, h)
-  } else {
-    ctx.drawImage(sprite, x, y, w, h)
-  }
-  ctx.restore()
+  octx.putImageData(id, 0, 0)
+  return out
 }
 
 let overlayPromise: Promise<MouthOverlay> | null = null
@@ -670,15 +713,9 @@ function getMouthOverlay(): Promise<MouthOverlay> {
   return overlayPromise
 }
 
-export type DamagedEyeSide = 'left' | 'right'
-
 export type FightFaceOptions = {
   mouthBroken?: boolean
   bruises?: BruiseStamp[]
-  /** Swollen black-eye overlay when opponent HP ≤ 70%. */
-  eyesDamaged?: boolean
-  /** Which eye shows the overlay — one side only. */
-  damagedEyeSide?: DamagedEyeSide
 }
 
 /** Compose face texture with bruises and optional broken mouth. */
@@ -687,18 +724,14 @@ export async function renderFightFace(
   options: FightFaceOptions = {},
 ): Promise<HTMLCanvasElement> {
   const mouthBroken = options.mouthBroken ?? false
-  const eyesDamaged = options.eyesDamaged ?? false
   const bruises = options.bruises ?? []
 
   const loaders: Promise<unknown>[] = [loadImage(previewUrl)]
   if (mouthBroken) loaders.push(getMouthOverlay())
-  if (eyesDamaged) loaders.push(getEyeSprite())
 
   const results = await Promise.all(loaders)
   const faceImg = results[0] as HTMLImageElement
-  let extra = 1
-  const mouthOverlay = mouthBroken ? (results[extra++] as MouthOverlay) : null
-  const eyeSprite = eyesDamaged ? (results[extra] as HTMLCanvasElement) : null
+  const mouthOverlay = mouthBroken ? (results[1] as MouthOverlay) : null
 
   const size = faceImg.naturalWidth
   const canvas = document.createElement('canvas')
@@ -725,21 +758,6 @@ export async function renderFightFace(
     paintBruise(ctx, stamp, size)
   }
 
-  if (eyesDamaged && eyeSprite) {
-    const side = options.damagedEyeSide ?? 'left'
-    const eye = side === 'left' ? MOUNT_LANDMARKS.leftEye : MOUNT_LANDMARKS.rightEye
-    paintEyeOverlay(
-      ctx,
-      eyeSprite,
-      eye.cx,
-      eye.cy,
-      eye.rx,
-      eye.ry,
-      size,
-      side === 'right',
-    )
-  }
-
   if (mouthBroken && mouthOverlay) {
     const mouth = MOUNT_LANDMARKS.mouth
     const mouthCx = size * mouth.cx
@@ -748,10 +766,17 @@ export async function renderFightFace(
     const destH = size * mouth.ry * 2
     const destX = mouthCx - destW / 2
     const destY = mouthCy - destH / 2
+    // Sample the skin being covered BEFORE the overlay goes on top.
+    const matched = colorMatchedMouth(mouthOverlay, ctx, {
+      x: destX,
+      y: destY,
+      w: destW,
+      h: destH,
+    })
     ctx.drawImage(
-      mouthOverlay.canvas,
-      mouthOverlay.box.x,
-      mouthOverlay.box.y,
+      matched,
+      0,
+      0,
       mouthOverlay.box.w,
       mouthOverlay.box.h,
       destX,
