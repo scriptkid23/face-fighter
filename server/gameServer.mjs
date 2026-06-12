@@ -39,6 +39,11 @@ function broadcastPeer(room, fromSlot, msg) {
 function maybeStartFight(room) {
   if (!room.p1?.ready || !room.p2?.ready) return
   if (!room.p1.face || !room.p2.face) return
+  // Re-send both faces first: a client that joined the room UI late may have
+  // missed the live peer_face relay. Same-socket ordering guarantees these
+  // arrive before fight_start.
+  send(room.p1.ws, { type: 'peer_face', dataUrl: room.p2.face })
+  send(room.p2.ws, { type: 'peer_face', dataUrl: room.p1.face })
   send(room.p1.ws, { type: 'fight_start' })
   send(room.p2.ws, { type: 'fight_start' })
 }
@@ -156,6 +161,18 @@ wss.on('connection', (ws) => {
       }
       case 'block': {
         broadcastPeer(room, meta.slot, { type: 'peer_block', active: !!msg.active })
+        break
+      }
+      case 'hit_result': {
+        const side = msg.side === 1 ? 1 : -1
+        const playerHp = Number(msg.playerHp)
+        if (!Number.isFinite(playerHp)) break
+        broadcastPeer(room, meta.slot, {
+          type: 'peer_hit_result',
+          blocked: !!msg.blocked,
+          playerHp: Math.max(0, Math.min(100, playerHp)),
+          side,
+        })
         break
       }
       case 'rematch': {

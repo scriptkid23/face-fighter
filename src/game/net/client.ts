@@ -12,6 +12,11 @@ export type GameNetHandlers = {
   onFightStart?: () => void
   onPeerPunch?: (side: -1 | 1) => void
   onPeerBlock?: (active: boolean) => void
+  onPeerHitResult?: (payload: {
+    blocked: boolean
+    playerHp: number
+    side: -1 | 1
+  }) => void
   onPeerRematch?: () => void
 }
 
@@ -84,6 +89,13 @@ export class GameNetClient {
       case 'peer_block':
         this.handlers.onPeerBlock?.(msg.active)
         break
+      case 'peer_hit_result':
+        this.handlers.onPeerHitResult?.({
+          blocked: msg.blocked,
+          playerHp: msg.playerHp,
+          side: msg.side,
+        })
+        break
       case 'peer_rematch':
         this.handlers.onPeerRematch?.()
         break
@@ -117,6 +129,14 @@ export class GameNetClient {
 
   sendBlock(active: boolean) {
     this.send({ type: 'block', active })
+  }
+
+  sendHitResult(payload: {
+    blocked: boolean
+    playerHp: number
+    side: -1 | 1
+  }) {
+    this.send({ type: 'hit_result', ...payload })
   }
 
   sendRematch() {

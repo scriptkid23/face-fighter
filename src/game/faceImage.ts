@@ -24,7 +24,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('Không đọc được ảnh'))
+    img.onerror = () => reject(new Error('Could not read image'))
     img.src = url
   })
 }
@@ -32,7 +32,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 async function canvasToPreviewUrl(canvas: HTMLCanvasElement): Promise<string> {
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error('Không xử lý được ảnh'))),
+      (b) => (b ? resolve(b) : reject(new Error('Could not process image'))),
       'image/png',
     )
   })
@@ -65,7 +65,7 @@ export async function buildProcessedFace(
 
 export async function processFaceFile(file: File): Promise<ProcessedFaceImage> {
   if (!file.type.startsWith('image/')) {
-    throw new Error('Vui lòng chọn file ảnh (JPG, PNG, WebP…)')
+    throw new Error('Please choose an image file (JPG, PNG, WebP…)')
   }
 
   const originalUrl = URL.createObjectURL(file)

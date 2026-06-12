@@ -78,14 +78,14 @@ export async function removePersonBackground(
   const result = segmenter.segment(canvas)
   try {
     const mask = result.confidenceMasks?.[0]
-    if (!mask) throw new Error('Không có mask phân vùng')
+    if (!mask) throw new Error('No segmentation mask')
     const data = mask.getAsFloat32Array()
     const mw = mask.width
     const mh = mask.height
     const inverted = centerAverage(data, mw, mh) < 0.5
 
     const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('Canvas không khả dụng')
+    if (!ctx) throw new Error('Canvas unavailable')
     const w = canvas.width
     const h = canvas.height
     const img = ctx.getImageData(0, 0, w, h)

@@ -48,9 +48,9 @@ export default function App() {
   const bindNetHandlers = useCallback(
     (net: GameNetClient) => {
       net.setHandlers({
-        onClose: () => setWaitHint('Mất kết nối LAN'),
+        onClose: () => setWaitHint('LAN connection lost'),
         onError: (msg) => setWaitHint(msg),
-        onPeerLeft: () => setWaitHint('Đối thủ thoát'),
+        onPeerLeft: () => setWaitHint('Opponent left'),
         onPeerFace: (dataUrl) => {
           const opp = faceFromDataUrl(dataUrl)
           oppFaceRef.current = opp
@@ -95,15 +95,15 @@ export default function App() {
       myFaceRef.current = face
       setMyFace(face)
       setPhase('waiting')
-      setWaitHint('Đang gửi mặt…')
+      setWaitHint('Sending face…')
 
       try {
         const dataUrl = await facePreviewToDataUrl(face.previewUrl)
         net.sendFace(dataUrl)
         net.sendReady()
-        setWaitHint('Chờ đối thủ sẵn sàng…')
+        setWaitHint('Waiting for opponent…')
       } catch {
-        setWaitHint('Không gửi được ảnh — thử lại')
+        setWaitHint('Could not send face — try again')
         setPhase('upload')
       }
     },
@@ -112,7 +112,7 @@ export default function App() {
 
   useEffect(() => {
     if (phase === 'waiting' && myFaceRef.current && oppFaceRef.current) {
-      setWaitHint('Đối thủ đã gửi mặt — chờ server bắt đầu…')
+      setWaitHint('Opponent sent their face — waiting for start…')
     }
   }, [phase, oppFace])
 
@@ -123,17 +123,17 @@ export default function App() {
       <div hidden={phase !== 'upload'}>
         <FaceUploadScreen
           onEnterFight={(face) => void handleUploadReady(face)}
-          backLabel={mode === 'pvp' ? '← Về lobby' : undefined}
+          backLabel={mode === 'pvp' ? '← Back to lobby' : undefined}
           onBack={mode === 'pvp' ? resetSession : undefined}
-          submitLabel={mode === 'pvp' ? 'Sẵn sàng — chờ đối thủ' : undefined}
+          submitLabel={mode === 'pvp' ? 'Ready — wait for opponent' : undefined}
         />
       </div>
 
       {phase === 'waiting' && (
         <div className="lobby-screen">
           <header className="lobby-header">
-            <p className="lobby-kicker">Phòng {roomId}</p>
-            <h1>Chờ đối thủ…</h1>
+            <p className="lobby-kicker">Room {roomId}</p>
+            <h1>Waiting for opponent…</h1>
             <p className="lobby-sub">{waitHint}</p>
           </header>
         </div>

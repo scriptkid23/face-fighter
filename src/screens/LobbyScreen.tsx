@@ -15,22 +15,30 @@ type LanTab = 'host' | 'join'
 
 export function LobbyScreen({ onReady }: LobbyScreenProps) {
   const netRef = useRef<GameNetClient | null>(null)
+  // Once the client is handed to App via onReady, this screen no longer owns
+  // it — unmounting must NOT close the socket the match runs on.
+  const handedOffRef = useRef(false)
   const [tab, setTab] = useState<LanTab>('host')
   const [roomCode, setRoomCode] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [hostIp, setHostIp] = useState(() => window.location.hostname)
-  const [status, setStatus] = useState('Chọn chế độ chơi')
+  const [status, setStatus] = useState('Choose a game mode')
   const [waitingPeer, setWaitingPeer] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => () => netRef.current?.close(), [])
+  useEffect(
+    () => () => {
+      if (!handedOffRef.current) netRef.current?.close()
+    },
+    [],
+  )
 
   function attachHandlers(net: GameNetClient, asHost: boolean) {
     net.setHandlers({
       onClose: () => {
         setWaitingPeer(false)
-        setStatus('Mất kết nối server LAN')
+        setStatus('LAN server disconnected')
         setBusy(false)
       },
       onError: (message) => {
@@ -40,24 +48,25 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
       onCreated: (roomId) => {
         setRoomCode(roomId)
         setWaitingPeer(true)
-        setStatus(`Phòng ${roomId} — chờ đối thủ…`)
+        setStatus(`Room ${roomId} — waiting for opponent…`)
         setBusy(false)
       },
       onJoined: (roomId) => {
         setRoomCode(roomId)
-        setStatus(`Đã vào phòng ${roomId}`)
+        setStatus(`Joined room ${roomId}`)
         setBusy(false)
+        handedOffRef.current = true
         onReady({ mode: 'pvp', net, roomId, isHost: false })
       },
       onPeerJoined: () => {
         if (!asHost) return
         setWaitingPeer(false)
-        setStatus('Đối thủ đã vào — bấm tiếp tục')
+        setStatus('Opponent joined — continue when ready')
       },
       onPeerLeft: () => {
         if (!asHost) return
         setWaitingPeer(true)
-        setStatus('Đối thủ thoát — chờ người mới…')
+        setStatus('Opponent left — waiting for someone new…')
       },
     })
   }
@@ -65,7 +74,7 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
   async function startHost() {
     setError(null)
     setBusy(true)
-    setStatus('Đang kết nối server…')
+    setStatus('Connecting to server…')
     try {
       netRef.current?.close()
       const net = new GameNetClient()
@@ -74,7 +83,7 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
       await net.connect(hostIp.trim() || window.location.hostname)
       net.createRoom()
     } catch {
-      setError('Không kết nối được server LAN — máy host đã chạy npm run dev?')
+      setError('Could not connect to LAN server — is the host running npm run dev?')
       setBusy(false)
     }
   }
@@ -82,12 +91,12 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
   async function startJoin() {
     const code = joinCode.trim().toUpperCase()
     if (code.length < 4) {
-      setError('Nhập mã phòng 4 ký tự')
+      setError('Enter a 4-character room code')
       return
     }
     setError(null)
     setBusy(true)
-    setStatus('Đang vào phòng…')
+    setStatus('Joining room…')
     try {
       netRef.current?.close()
       const net = new GameNetClient()
@@ -96,7 +105,7 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
       await net.connect(hostIp.trim() || window.location.hostname)
       net.joinRoom(code)
     } catch {
-      setError('Không kết nối được server LAN')
+      setError('Could not connect to LAN server')
       setBusy(false)
     }
   }
@@ -104,6 +113,7 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
   function continueHost() {
     const net = netRef.current
     if (!net || !roomCode) return
+    handedOffRef.current = true
     onReady({ mode: 'pvp', net, roomId: roomCode, isHost: true })
   }
 
@@ -111,10 +121,10 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
     <div className="lobby-screen">
       <header className="lobby-header">
         <p className="lobby-kicker">Face Fighter HD</p>
-        <h1>Chọn chế độ</h1>
+        <h1>Choose mode</h1>
         <p className="lobby-sub">
-          Solo đấu AI, hoặc LAN 2 người qua Wi‑Fi. Máy host chạy{' '}
-          <code>npm run dev</code> (Vite + server LAN port {GAME_WS_PORT}).
+          Solo vs AI, or 2-player LAN over Wi‑Fi. The host runs{' '}
+          <code>npm run dev</code> (Vite + LAN server on port {GAME_WS_PORT}).
         </p>
       </header>
 
@@ -126,7 +136,7 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
         </section>
 
         <section className="panel lobby-panel lobby-panel--lan">
-          <h2>Đấu LAN</h2>
+          <h2>LAN match</h2>
 
           <div className="lobby-tabs">
             <button
@@ -134,19 +144,19 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
               className={tab === 'host' ? 'lobby-tab lobby-tab--active' : 'lobby-tab'}
               onClick={() => setTab('host')}
             >
-              Tạo phòng
+              Host room
             </button>
             <button
               type="button"
               className={tab === 'join' ? 'lobby-tab lobby-tab--active' : 'lobby-tab'}
               onClick={() => setTab('join')}
             >
-              Vào phòng
+              Join room
             </button>
           </div>
 
           <label className="lobby-field">
-            <span>IP máy host (WebSocket)</span>
+            <span>Host IP (WebSocket)</span>
             <input
               value={hostIp}
               onChange={(e) => setHostIp(e.target.value)}
@@ -159,18 +169,18 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
             <>
               {!roomCode ? (
                 <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void startHost()}>
-                  {busy ? 'Đang tạo…' : 'Tạo phòng LAN'}
+                  {busy ? 'Creating…' : 'Create LAN room'}
                 </button>
               ) : (
                 <div className="lobby-room">
-                  <p className="lobby-room-label">Mã phòng</p>
+                  <p className="lobby-room-label">Room code</p>
                   <p className="lobby-room-code">{roomCode}</p>
                   <p className="lobby-room-hint">
-                    Đối thủ mở <strong>http://{hostIp || 'IP-host'}:5173</strong> → Vào phòng → nhập mã
+                    Opponent opens <strong>http://{hostIp || 'host-ip'}:5173</strong> → Join room → enter code
                   </p>
                   {!waitingPeer && (
                     <button type="button" className="btn btn-primary" onClick={continueHost}>
-                      Tiếp tục — căn mặt
+                      Continue — align face
                     </button>
                   )}
                 </div>
@@ -179,7 +189,7 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
           ) : (
             <>
               <label className="lobby-field">
-                <span>Mã phòng</span>
+                <span>Room code</span>
                 <input
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
@@ -189,7 +199,7 @@ export function LobbyScreen({ onReady }: LobbyScreenProps) {
                 />
               </label>
               <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void startJoin()}>
-                {busy ? 'Đang vào…' : 'Vào phòng'}
+                {busy ? 'Joining…' : 'Join room'}
               </button>
             </>
           )}

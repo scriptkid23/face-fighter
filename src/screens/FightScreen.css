@@ -105,6 +105,34 @@
   text-align: center;
 }
 
+.fight-guard {
+  pointer-events: auto;
+  display: block;
+  width: 100%;
+  margin: 0 auto 8px;
+  padding: 10px 8px;
+  border: var(--border-width-lg) solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bauhaus-yellow);
+  color: var(--bauhaus-foreground);
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.fight-guard--active,
+.fight-guard:active {
+  background: var(--bauhaus-white);
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
 .fight-hp-name--player {
   color: var(--bauhaus-white);
   text-align: center;

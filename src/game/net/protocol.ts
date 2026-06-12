@@ -7,6 +7,7 @@ export type ClientMessage =
   | { type: 'ready' }
   | { type: 'punch'; side: -1 | 1 }
   | { type: 'block'; active: boolean }
+  | { type: 'hit_result'; blocked: boolean; playerHp: number; side: -1 | 1 }
   | { type: 'rematch' }
 
 export type ServerMessage =
@@ -19,6 +20,7 @@ export type ServerMessage =
   | { type: 'fight_start' }
   | { type: 'peer_punch'; side: -1 | 1 }
   | { type: 'peer_block'; active: boolean }
+  | { type: 'peer_hit_result'; blocked: boolean; playerHp: number; side: -1 | 1 }
   | { type: 'peer_rematch' }
 
 export const GAME_WS_PORT = 8787

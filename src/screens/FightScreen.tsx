@@ -369,6 +369,7 @@ export function FightScreen({
     let started = false
     let mouthBroken = false
     let blocking = false
+    let blockUntil = 0
     let aiCooldown = 2.2
     let aiWindup = false
     const headVel = { x: 0, y: 0, z: 0 }
@@ -435,62 +436,22 @@ export function FightScreen({
       window.setTimeout(() => w.remove(), 520)
     }
 
-    function updatePlayerHpBar() {
-      if (!playerHpFill) return
-      playerHpFill.style.width = `${playerHp}%`
-      if (playerHp <= 50) {
-        playerHpFill.style.background = '#f0c020'
+    function isBlocking() {
+      return blocking || performance.now() < blockUntil
+    }
+
+    function updateOpponentHpBar() {
+      if (!hpFill) return
+      hpFill.style.width = `${hp}%`
+      if (hp <= 50) {
+        hpFill.style.background = '#f0c020'
       }
-      if (playerHp < 18) {
-        playerHpFill.style.background = '#d02020'
+      if (hp < 18) {
+        hpFill.style.background = '#d02020'
       }
     }
 
-    function landPlayerHit(side: number) {
-      if (ko) return
-      if (blocking) {
-        showFightWord(
-          BLOCK_WORDS[(Math.random() * BLOCK_WORDS.length) | 0] ?? 'BLOCK!',
-          'fight-pow fight-pow--block',
-        )
-        playerHp = Math.max(0, playerHp - 2)
-        updatePlayerHpBar()
-        shake = 0.35
-        if (navigator.vibrate) navigator.vibrate(12)
-        return
-      }
-
-      playerHp = Math.max(0, playerHp - (8 + Math.random() * 6))
-      updatePlayerHpBar()
-      playOuchSound()
-      shake = 1.1
-      if (flash) {
-        flash.style.background = '#d02020'
-        flash.style.opacity = '0.4'
-        window.setTimeout(() => {
-          if (flash) {
-            flash.style.opacity = '0'
-            flash.style.background = ''
-          }
-        }, 80)
-      }
-      showFightWord('OUCH!', 'fight-pow fight-pow--hurt', -side * 40)
-      if (navigator.vibrate) navigator.vibrate(55)
-      if (playerHp <= 0) doPlayerKO()
-    }
-
-    function landHit(side: number) {
-      if (ko) return
-      hp = Math.max(0, hp - (7 + Math.random() * 6))
-      if (hpFill) {
-        hpFill.style.width = `${hp}%`
-        if (hp <= 50) {
-          hpFill.style.background = '#f0c020'
-        }
-        if (hp < 18) {
-          hpFill.style.background = '#d02020'
-        }
-      }
+    function applyOpponentHitVisuals(side: number) {
       headVel.y += 0.5 + Math.random() * 0.3
       headVel.x += -side * (0.8 + Math.random() * 0.5)
       headVel.z += 0.35
@@ -510,6 +471,82 @@ export function FightScreen({
       }
       showFightWord(HIT_WORDS[(Math.random() * HIT_WORDS.length) | 0] ?? 'POW!', 'fight-pow', side * 60)
       if (navigator.vibrate) navigator.vibrate(35)
+    }
+
+    function applyPeerHitResult(blocked: boolean, peerPlayerHp: number, side: number) {
+      hp = peerPlayerHp
+      updateOpponentHpBar()
+      if (blocked) {
+        showFightWord(
+          BLOCK_WORDS[(Math.random() * BLOCK_WORDS.length) | 0] ?? 'BLOCK!',
+          'fight-pow fight-pow--block',
+        )
+        shake = 0.35
+        if (navigator.vibrate) navigator.vibrate(12)
+      } else {
+        applyOpponentHitVisuals(side)
+      }
+      if (hp <= 0) doKO()
+    }
+
+    function setBlocking(active: boolean) {
+      blocking = active
+      if (active) blockUntil = 0
+      else blockUntil = performance.now() + 150
+      wrapRef.current?.querySelector('#fight-guard')?.classList.toggle('fight-guard--active', active)
+      if (mode === 'pvp') netRef.current?.sendBlock(active)
+    }
+
+    function updatePlayerHpBar() {
+      if (!playerHpFill) return
+      playerHpFill.style.width = `${playerHp}%`
+      if (playerHp <= 50) {
+        playerHpFill.style.background = '#f0c020'
+      }
+      if (playerHp < 18) {
+        playerHpFill.style.background = '#d02020'
+      }
+    }
+
+    function landPlayerHit(side: number): boolean {
+      if (ko) return false
+      if (isBlocking()) {
+        showFightWord(
+          BLOCK_WORDS[(Math.random() * BLOCK_WORDS.length) | 0] ?? 'BLOCK!',
+          'fight-pow fight-pow--block',
+        )
+        playerHp = Math.max(0, playerHp - 2)
+        updatePlayerHpBar()
+        shake = 0.35
+        if (navigator.vibrate) navigator.vibrate(12)
+        return true
+      }
+
+      playerHp = Math.max(0, playerHp - (8 + Math.random() * 6))
+      updatePlayerHpBar()
+      playOuchSound()
+      shake = 1.1
+      if (flash) {
+        flash.style.background = '#d02020'
+        flash.style.opacity = '0.4'
+        window.setTimeout(() => {
+          if (flash) {
+            flash.style.opacity = '0'
+            flash.style.background = ''
+          }
+        }, 80)
+      }
+      showFightWord('OUCH!', 'fight-pow fight-pow--hurt', -side * 40)
+      if (navigator.vibrate) navigator.vibrate(55)
+      if (playerHp <= 0) doPlayerKO()
+      return false
+    }
+
+    function landHit(side: number) {
+      if (ko) return
+      hp = Math.max(0, hp - (7 + Math.random() * 6))
+      updateOpponentHpBar()
+      applyOpponentHitVisuals(side)
       if (hp <= 0) doKO()
     }
 
@@ -560,6 +597,8 @@ export function FightScreen({
       dizzy = 0
       mouthBroken = false
       blocking = false
+      blockUntil = 0
+      wrapRef.current?.querySelector('#fight-guard')?.classList.remove('fight-guard--active')
       aiCooldown = 2.2
       aiWindup = false
       bruises.length = 0
@@ -626,25 +665,40 @@ export function FightScreen({
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         e.preventDefault()
-        blocking = true
-        if (mode === 'pvp') netRef.current?.sendBlock(true)
+        setBlocking(true)
         return
       }
       if (e.key === 'a' || e.key === 'ArrowLeft') punch(-1)
       if (e.key === 'l' || e.key === 'ArrowRight') punch(1)
     }
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        blocking = false
-        if (mode === 'pvp') netRef.current?.sendBlock(false)
-      }
+      if (e.code === 'Space') setBlocking(false)
     }
 
     const btnLeft = root.querySelector('#fight-pl')
     const btnRight = root.querySelector('#fight-pr')
+    const guardBtn = root.querySelector('#fight-guard') as HTMLButtonElement | null
     const btnRematch = root.querySelector('#fight-rematch')
+    const onGuardDown = (e: PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      guardBtn?.setPointerCapture(e.pointerId)
+      setBlocking(true)
+    }
+    const onGuardUp = (e: PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (guardBtn?.hasPointerCapture(e.pointerId)) {
+        guardBtn.releasePointerCapture(e.pointerId)
+      }
+      setBlocking(false)
+    }
     btnLeft?.addEventListener('pointerdown', onPunchLeft)
     btnRight?.addEventListener('pointerdown', onPunchRight)
+    guardBtn?.addEventListener('pointerdown', onGuardDown)
+    guardBtn?.addEventListener('pointerup', onGuardUp)
+    guardBtn?.addEventListener('pointercancel', onGuardUp)
+    guardBtn?.addEventListener('pointerleave', onGuardUp)
     btnRematch?.addEventListener('click', mode === 'pvp' ? rematchOnline : rematch)
     canvas.addEventListener('pointerdown', onCanvasDown)
     window.addEventListener('keydown', onKey)
@@ -731,7 +785,7 @@ export function FightScreen({
             g.position.lerpVectors(u.rest, target, THREE.MathUtils.smoothstep(u.t, 0, 1))
             if (u.t >= 0.92 && !u.hit) {
               u.hit = true
-              landHit(u.side)
+              if (mode !== 'pvp') landHit(u.side)
             }
           } else if (u.t < 2) {
             g.position.lerpVectors(target, u.rest, THREE.MathUtils.smoothstep(u.t - 1, 0, 1))
@@ -742,7 +796,7 @@ export function FightScreen({
           }
         } else {
           const guard = guardPos[i]
-          if (blocking) {
+          if (isBlocking()) {
             g.position.lerp(guard, dt * 14)
           } else {
             g.position.lerp(u.rest, dt * 10)
@@ -761,7 +815,14 @@ export function FightScreen({
           g.position.lerpVectors(u.rest, u.target, THREE.MathUtils.smoothstep(u.t, 0, 1))
           if (u.t >= 0.9 && !u.hit) {
             u.hit = true
-            landPlayerHit(u.side)
+            const blocked = landPlayerHit(u.side)
+            if (mode === 'pvp') {
+              netRef.current?.sendHitResult({
+                blocked,
+                playerHp,
+                side: u.side as -1 | 1,
+              })
+            }
           }
         } else if (u.t < 2) {
           g.position.lerpVectors(u.target, u.rest, THREE.MathUtils.smoothstep(u.t - 1, 0, 1))
@@ -783,6 +844,8 @@ export function FightScreen({
     if (mode === 'pvp' && netRef.current) {
       netRef.current.setHandlers({
         onPeerPunch: (side) => incomingPunch(side),
+        onPeerHitResult: ({ blocked, playerHp, side }) =>
+          applyPeerHitResult(blocked, playerHp, side),
         onPeerRematch: () => rematchLocal(),
         onClose: () => showSplash('DISCONNECTED'),
       })
@@ -799,6 +862,10 @@ export function FightScreen({
       canvas.removeEventListener('pointerdown', onCanvasDown)
       btnLeft?.removeEventListener('pointerdown', onPunchLeft)
       btnRight?.removeEventListener('pointerdown', onPunchRight)
+      guardBtn?.removeEventListener('pointerdown', onGuardDown)
+      guardBtn?.removeEventListener('pointerup', onGuardUp)
+      guardBtn?.removeEventListener('pointercancel', onGuardUp)
+      guardBtn?.removeEventListener('pointerleave', onGuardUp)
       btnRematch?.removeEventListener('click', mode === 'pvp' ? rematchOnline : rematch)
       clearTeeth()
       toothGeo.dispose()
@@ -832,8 +899,8 @@ export function FightScreen({
 
       <p className="fight-hint">
         {mode === 'pvp'
-          ? 'LAN PvP — punch: tap or buttons · Space to block'
-          : 'Punch: tap screen or buttons · Hold Space to block'}
+          ? 'LAN PvP — punch: tap or buttons · hold GUARD or Space to block'
+          : 'Punch: tap or buttons · hold GUARD (center) or Space to block'}
       </p>
 
       <div className="fight-controls">
@@ -846,6 +913,9 @@ export function FightScreen({
           {mode === 'pvp' && playerFace && (
             <div ref={playerPortraitRef} className="fight-portrait fight-portrait--player" />
           )}
+          <button type="button" className="fight-guard" id="fight-guard">
+            GUARD
+          </button>
           <div className="fight-hp-name fight-hp-name--player">YOU</div>
           <div className="fight-hp-bar fight-hp-bar--player">
             <div ref={playerHpRef} className="fight-hp-fill fight-hp-fill--player" />
@@ -866,7 +936,7 @@ export function FightScreen({
       </div>
 
       <button type="button" className="fight-back" onClick={onBack}>
-        {mode === 'pvp' ? '← Thoát LAN' : '← Re-align face'}
+        {mode === 'pvp' ? '← Leave LAN' : '← Re-align face'}
       </button>
     </div>
   )
