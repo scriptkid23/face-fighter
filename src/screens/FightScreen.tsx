@@ -368,8 +368,9 @@ export function FightScreen({
     let ko = false
     let started = false
     let mouthBroken = false
-    let blocking = false
-    let blockUntil = 0
+    let guardHeld = false
+    let blockGraceUntil = 0
+    const BLOCK_GRACE_MS = 60
     let aiCooldown = 2.2
     let aiWindup = false
     const headVel = { x: 0, y: 0, z: 0 }
@@ -436,8 +437,14 @@ export function FightScreen({
       window.setTimeout(() => w.remove(), 520)
     }
 
-    function isBlocking() {
-      return blocking || performance.now() < blockUntil
+    /** Gloves / button — follows input immediately. */
+    function isGuardUp() {
+      return guardHeld
+    }
+
+    /** Hit check — tiny grace so a block pressed just before impact still counts. */
+    function absorbsHit() {
+      return guardHeld || performance.now() < blockGraceUntil
     }
 
     function updateOpponentHpBar() {
@@ -490,9 +497,9 @@ export function FightScreen({
     }
 
     function setBlocking(active: boolean) {
-      blocking = active
-      if (active) blockUntil = 0
-      else blockUntil = performance.now() + 150
+      guardHeld = active
+      if (active) blockGraceUntil = 0
+      else blockGraceUntil = performance.now() + BLOCK_GRACE_MS
       wrapRef.current?.querySelector('#fight-guard')?.classList.toggle('fight-guard--active', active)
       if (mode === 'pvp') netRef.current?.sendBlock(active)
     }
@@ -510,7 +517,7 @@ export function FightScreen({
 
     function landPlayerHit(side: number): boolean {
       if (ko) return false
-      if (isBlocking()) {
+      if (absorbsHit()) {
         showFightWord(
           BLOCK_WORDS[(Math.random() * BLOCK_WORDS.length) | 0] ?? 'BLOCK!',
           'fight-pow fight-pow--block',
@@ -596,8 +603,8 @@ export function FightScreen({
       ko = false
       dizzy = 0
       mouthBroken = false
-      blocking = false
-      blockUntil = 0
+      guardHeld = false
+      blockGraceUntil = 0
       wrapRef.current?.querySelector('#fight-guard')?.classList.remove('fight-guard--active')
       aiCooldown = 2.2
       aiWindup = false
@@ -796,10 +803,10 @@ export function FightScreen({
           }
         } else {
           const guard = guardPos[i]
-          if (isBlocking()) {
+          if (isGuardUp()) {
             g.position.lerp(guard, dt * 14)
           } else {
-            g.position.lerp(u.rest, dt * 10)
+            g.position.lerp(u.rest, dt * 18)
             if (g.position.distanceTo(u.rest) < 0.08) {
               g.position.y = u.rest.y + Math.sin(t * 3 + u.side) * 0.06
             }
