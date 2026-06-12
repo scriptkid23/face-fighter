@@ -1,0 +1,140 @@
+.lobby-screen {
+  min-height: 100vh;
+  padding: 24px 16px 48px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.lobby-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.lobby-kicker {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(18, 18, 18, 0.65);
+}
+
+.lobby-header h1 {
+  margin: 0 0 10px;
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+}
+
+.lobby-sub {
+  margin: 0 auto;
+  max-width: 640px;
+  color: rgba(18, 18, 18, 0.65);
+  line-height: 1.5;
+}
+
+.lobby-sub code {
+  font-size: 0.85em;
+}
+
+.lobby-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.lobby-panel.panel {
+  background: var(--bauhaus-white);
+  border: var(--border-width-lg) solid var(--border-color);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-xl);
+}
+
+@media (min-width: 720px) {
+  .lobby-grid {
+    grid-template-columns: 1fr 1.2fr;
+  }
+}
+
+.lobby-panel {
+  padding: 20px;
+}
+
+.lobby-panel h2 {
+  margin: 0 0 14px;
+  font-size: 1.1rem;
+}
+
+.lobby-solo {
+  width: 100%;
+  padding: 18px;
+  font-size: 1rem;
+}
+
+.lobby-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.lobby-tab {
+  flex: 1;
+  border: var(--border-width) solid var(--border-color);
+  background: var(--bauhaus-muted);
+  padding: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lobby-tab--active {
+  background: var(--bauhaus-yellow);
+}
+
+.lobby-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.lobby-field input {
+  border: var(--border-width) solid var(--border-color);
+  padding: 10px 12px;
+  font: inherit;
+  background: var(--bauhaus-white);
+}
+
+.lobby-room {
+  display: grid;
+  gap: 10px;
+}
+
+.lobby-room-label {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.lobby-room-code {
+  margin: 0;
+  font-size: 2.4rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+}
+
+.lobby-room-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: rgba(18, 18, 18, 0.65);
+}
+
+.lobby-status {
+  margin: 14px 0 0;
+  font-size: 0.9rem;
+  color: rgba(18, 18, 18, 0.65);
+}
+
+.lobby-error {
+  margin: 8px 0 0;
+  color: var(--bauhaus-red);
+  font-weight: 700;
+}

@@ -8,10 +8,14 @@ import {
 } from '../game/faceDamage'
 import type { ProcessedFaceImage } from '../game/faceImage'
 import { buildFaceMesh, buildSkullMesh } from '../game/fighterHead'
+import type { GameNetClient } from '../game/net/client'
 import './FightScreen.css'
 
 type FightScreenProps = {
   face: ProcessedFaceImage
+  playerFace?: ProcessedFaceImage
+  mode?: 'ai' | 'pvp'
+  net?: GameNetClient | null
   onBack: () => void
 }
 
@@ -26,7 +30,13 @@ const BAUHAUS = {
   yellow: 0xf0c020,
 }
 
-export function FightScreen({ face, onBack }: FightScreenProps) {
+export function FightScreen({
+  face,
+  playerFace,
+  mode = 'ai',
+  net = null,
+  onBack,
+}: FightScreenProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hpRef = useRef<HTMLDivElement>(null)
@@ -36,12 +46,21 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
   const flashRef = useRef<HTMLDivElement>(null)
   const koRef = useRef<HTMLDivElement>(null)
   const portraitRef = useRef<HTMLDivElement>(null)
+  const playerPortraitRef = useRef<HTMLDivElement>(null)
+  const netRef = useRef(net)
+  netRef.current = net
 
   useEffect(() => {
     if (portraitRef.current) {
       portraitRef.current.style.backgroundImage = `url(${face.previewUrl})`
     }
   }, [face.previewUrl])
+
+  useEffect(() => {
+    if (playerPortraitRef.current && playerFace) {
+      playerPortraitRef.current.style.backgroundImage = `url(${playerFace.previewUrl})`
+    }
+  }, [playerFace?.previewUrl])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -511,8 +530,20 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     }
 
     function tryAiPunch() {
+      if (mode === 'pvp') return
       if (ko || !started || aiWindup) return
       const side = Math.random() < 0.5 ? -1 : 1
+      const g = aiGloves[side < 0 ? 0 : 1]
+      const u = g.userData as AiGloveUserData
+      if (u.active) return
+      u.active = true
+      u.t = 0
+      u.hit = false
+      aiWindup = true
+    }
+
+    function incomingPunch(side: number) {
+      if (ko || !started) return
       const g = aiGloves[side < 0 ? 0 : 1]
       const u = g.userData as AiGloveUserData
       if (u.active) return
@@ -565,6 +596,12 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       showSplash('ROUND 2!')
     }
 
+    const rematchLocal = rematch
+    function rematchOnline() {
+      netRef.current?.sendRematch()
+      rematchLocal()
+    }
+
     function punch(side: number) {
       if (ko || !started) return
       const g = myGloves[side < 0 ? 0 : 1]
@@ -574,6 +611,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       ud.t = 0
       ud.hit = false
       playPunchSound()
+      if (mode === 'pvp') netRef.current?.sendPunch(side as -1 | 1)
     }
 
     const onPunchLeft = (e: Event) => {
@@ -589,13 +627,17 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       if (e.code === 'Space') {
         e.preventDefault()
         blocking = true
+        if (mode === 'pvp') netRef.current?.sendBlock(true)
         return
       }
       if (e.key === 'a' || e.key === 'ArrowLeft') punch(-1)
       if (e.key === 'l' || e.key === 'ArrowRight') punch(1)
     }
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') blocking = false
+      if (e.code === 'Space') {
+        blocking = false
+        if (mode === 'pvp') netRef.current?.sendBlock(false)
+      }
     }
 
     const btnLeft = root.querySelector('#fight-pl')
@@ -603,7 +645,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
     const btnRematch = root.querySelector('#fight-rematch')
     btnLeft?.addEventListener('pointerdown', onPunchLeft)
     btnRight?.addEventListener('pointerdown', onPunchRight)
-    btnRematch?.addEventListener('click', rematch)
+    btnRematch?.addEventListener('click', mode === 'pvp' ? rematchOnline : rematch)
     canvas.addEventListener('pointerdown', onCanvasDown)
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', onKeyUp)
@@ -671,7 +713,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
         }
       }
 
-      if (!ko && started) {
+      if (!ko && started && mode === 'ai') {
         aiCooldown -= dt
         if (aiCooldown <= 0) tryAiPunch()
       }
@@ -738,6 +780,14 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
 
       renderer.render(scene, camera)
     }
+    if (mode === 'pvp' && netRef.current) {
+      netRef.current.setHandlers({
+        onPeerPunch: (side) => incomingPunch(side),
+        onPeerRematch: () => rematchLocal(),
+        onClose: () => showSplash('DISCONNECTED'),
+      })
+    }
+
     animate()
 
     return () => {
@@ -749,14 +799,14 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       canvas.removeEventListener('pointerdown', onCanvasDown)
       btnLeft?.removeEventListener('pointerdown', onPunchLeft)
       btnRight?.removeEventListener('pointerdown', onPunchRight)
-      btnRematch?.removeEventListener('click', rematch)
+      btnRematch?.removeEventListener('click', mode === 'pvp' ? rematchOnline : rematch)
       clearTeeth()
       toothGeo.dispose()
       toothMat.dispose()
       faceCanvasTex?.dispose()
       renderer.dispose()
     }
-  }, [face.previewUrl])
+  }, [face.previewUrl, mode])
 
   return (
     <div ref={wrapRef} className="fight-screen">
@@ -766,7 +816,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
         <div className="fight-hp-row">
           <div ref={portraitRef} className="fight-portrait" />
           <div className="fight-hp-shell">
-            <div className="fight-hp-name">OPPONENT</div>
+            <div className="fight-hp-name">{mode === 'pvp' ? 'OPPONENT' : 'OPPONENT'}</div>
             <div className="fight-hp-bar">
               <div ref={hpRef} className="fight-hp-fill" />
             </div>
@@ -781,7 +831,9 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       <div ref={flashRef} className="fight-flash" />
 
       <p className="fight-hint">
-        Punch: tap screen or buttons · Hold Space to block
+        {mode === 'pvp'
+          ? 'LAN PvP — punch: tap or buttons · Space to block'
+          : 'Punch: tap screen or buttons · Hold Space to block'}
       </p>
 
       <div className="fight-controls">
@@ -791,6 +843,9 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
           PUNCH
         </button>
         <div className="fight-player-hud">
+          {mode === 'pvp' && playerFace && (
+            <div ref={playerPortraitRef} className="fight-portrait fight-portrait--player" />
+          )}
           <div className="fight-hp-name fight-hp-name--player">YOU</div>
           <div className="fight-hp-bar fight-hp-bar--player">
             <div ref={playerHpRef} className="fight-hp-fill fight-hp-fill--player" />
@@ -811,7 +866,7 @@ export function FightScreen({ face, onBack }: FightScreenProps) {
       </div>
 
       <button type="button" className="fight-back" onClick={onBack}>
-        ← Re-align face
+        {mode === 'pvp' ? '← Thoát LAN' : '← Re-align face'}
       </button>
     </div>
   )

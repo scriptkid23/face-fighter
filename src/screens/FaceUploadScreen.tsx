@@ -13,6 +13,9 @@ import './FaceUploadScreen.css'
 
 type FaceUploadScreenProps = {
   onEnterFight: (face: ProcessedFaceImage) => void
+  onBack?: () => void
+  backLabel?: string
+  submitLabel?: string
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -24,7 +27,12 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   })
 }
 
-export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
+export function FaceUploadScreen({
+  onEnterFight,
+  onBack,
+  backLabel = '← Back',
+  submitLabel = 'Looks good — fight!',
+}: FaceUploadScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const faceRef = useRef<ProcessedFaceImage | null>(null)
   const [face, setFace] = useState<ProcessedFaceImage | null>(null)
@@ -249,15 +257,17 @@ export function FaceUploadScreen({ onEnterFight }: FaceUploadScreenProps) {
             <button type="button" className="btn btn-secondary" onClick={onPickAnother}>
               Choose another photo
             </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => onEnterFight(face)}
-            >
-              Looks good — fight!
+            <button type="button" className="btn btn-primary" onClick={() => onEnterFight(face)}>
+              {submitLabel}
             </button>
           </div>
         </section>
+      )}
+
+      {onBack && (
+        <button type="button" className="btn btn-secondary upload-back" onClick={onBack}>
+          {backLabel}
+        </button>
       )}
     </div>
   )
